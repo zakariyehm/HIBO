@@ -1,33 +1,101 @@
 import { Tabs } from 'expo-router';
 import React from 'react';
+import { TouchableOpacity } from 'react-native';
+import { FontAwesome5 } from '@expo/vector-icons';
 
-import { HapticTab } from '@/components/haptic-tab';
-import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
-import { useColorScheme } from '@/hooks/use-color-scheme';
 
 export default function TabLayout() {
-  const colorScheme = useColorScheme();
-
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
+        tabBarActiveTintColor: Colors.navbarIcon,
+        tabBarInactiveTintColor: '#888888',
+        tabBarStyle: {
+          backgroundColor: Colors.navbarBackground,
+        },
+        tabBarButton: (props) => (
+          <TouchableOpacity
+            {...props}
+            activeOpacity={0.7}
+            style={[
+              props.style,
+              {
+                opacity: props.accessibilityState?.selected ? 1 : 0.7,
+              },
+            ]}
+          />
+        ),
         headerShown: false,
-        tabBarButton: HapticTab,
       }}>
       <Tabs.Screen
         name="index"
         options={{
           title: 'Home',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="house.fill" color={color} />,
+          tabBarIcon: ({ color, size, focused }) => (
+            <FontAwesome5 
+              name="home" 
+              size={size} 
+              color={color} 
+              solid={focused}
+            />
+          ),
         }}
       />
       <Tabs.Screen
-        name="explore"
+        name="likes"
         options={{
-          title: 'Explore',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="paperplane.fill" color={color} />,
+          title: 'Likes',
+          tabBarIcon: ({ color, size, focused }) => (
+            <FontAwesome5 
+              name="thumbs-up" 
+              size={size} 
+              color={color} 
+              solid={focused}
+            />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="favorites"
+        options={{
+          title: 'Favorites',
+          tabBarIcon: ({ color, size, focused }) => (
+            <FontAwesome5 
+              name="heart" 
+              size={size} 
+              color={color} 
+              solid={focused}
+            />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="messages"
+        options={{
+          title: 'Messages',
+          tabBarIcon: ({ color, size, focused }) => (
+            <FontAwesome5 
+              name="envelope" 
+              size={size} 
+              color={color} 
+              solid={focused}
+            />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="profile"
+        options={{
+          title: 'Profile',
+          tabBarIcon: ({ color, size, focused }) => (
+            <FontAwesome5 
+              name="user-circle" 
+              size={size} 
+              color={color} 
+              solid={focused}
+            />
+          ),
         }}
       />
     </Tabs>

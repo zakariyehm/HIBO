@@ -1,98 +1,96 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
-
-import { HelloWave } from '@/components/hello-wave';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Link } from 'expo-router';
+import { AppHeader } from '@/components/app-header';
+import { PostCard } from '@/components/post-card';
+import { Colors } from '@/constants/theme';
+import React from 'react';
+import { ScrollView, StatusBar, StyleSheet, View } from 'react-native';
 
 export default function HomeScreen() {
-  return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <Link href="/modal">
-          <Link.Trigger>
-            <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-          </Link.Trigger>
-          <Link.Preview />
-          <Link.Menu>
-            <Link.MenuAction title="Action" icon="cube" onPress={() => alert('Action pressed')} />
-            <Link.MenuAction
-              title="Share"
-              icon="square.and.arrow.up"
-              onPress={() => alert('Share pressed')}
-            />
-            <Link.Menu title="More" icon="ellipsis">
-              <Link.MenuAction
-                title="Delete"
-                icon="trash"
-                destructive
-                onPress={() => alert('Delete pressed')}
-              />
-            </Link.Menu>
-          </Link.Menu>
-        </Link>
+  const handleShare = () => {
+    console.log('Share pressed');
+  };
 
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+  const handleComment = () => {
+    console.log('Comment pressed');
+  };
+
+  const handleNotification = () => {
+    console.log('Notification pressed');
+  };
+
+  const handleInvite = () => {
+    console.log('Invite pressed');
+  };
+
+  const handleSearch = (text: string) => {
+    console.log('Search:', text);
+  };
+
+  return (
+    <View style={styles.container}>
+      <StatusBar barStyle="dark-content" />
+      <AppHeader
+        onNotificationPress={handleNotification}
+        onSharePress={handleShare}
+        onInvitePress={handleInvite}
+        onSearch={handleSearch}
+        showNotificationDot={true}
+        showShareDot={true}
+      />
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.contentContainer}
+        showsVerticalScrollIndicator={false}
+      >
+        <PostCard
+          profileName="Jake"
+          location="Austin"
+          username="DarlingDaisy"
+          timeAgo="32m"
+          postImage="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&h=400&fit=crop"
+          postText="We went on 3 dates and then he just disappeared on me. I slept with him which I'm now regretting. Should I reach out or just move on?"
+          commentCount={32}
+          onShare={handleShare}
+          onComment={handleComment}
+        />
+        
+        <PostCard
+          profileName="Sarah"
+          location="Los Angeles"
+          username="CityGirl23"
+          timeAgo="1h"
+          postImage="https://images.unsplash.com/photo-1492562080023-ab3db95bfbce?w=400&h=400&fit=crop"
+          postText="Met someone amazing but he's always busy with work. Is it worth waiting for someone who can't make time for you? I'm starting to doubt if he's really interested."
+          commentCount={45}
+          onShare={handleShare}
+          onComment={handleComment}
+        />
+        
+        <PostCard
+          profileName="Mike"
+          location="Chicago"
+          username="WindyCityMike"
+          timeAgo="2h"
+          postImage="https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=400&h=400&fit=crop"
+          postText="Dating in 2024 is so confusing. Everyone seems to want something different. How do you know if someone is genuinely interested or just playing games?"
+          commentCount={67}
+          onShare={handleShare}
+          onComment={handleComment}
+        />
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  titleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
+  container: {
+    flex: 1,
+    backgroundColor: Colors.background,
   },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
+  scrollView: {
+    flex: 1,
   },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
+  contentContainer: {
+    padding: 16,
+    paddingTop: 16,
   },
 });

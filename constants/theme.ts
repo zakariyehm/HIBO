@@ -1,30 +1,30 @@
 /**
- * Below are the colors that are used in the app. The colors are defined in the light and dark mode.
- * There are many other ways to style your app. For example, [Nativewind](https://www.nativewind.dev/), [Tamagui](https://tamagui.dev/), [unistyles](https://reactnativeunistyles.vercel.app), etc.
+ * Colors used in the app - Light theme only
  */
 
 import { Platform } from 'react-native';
 
-const tintColorLight = '#0a7ea4';
-const tintColorDark = '#fff';
+const tintColor = '#0a7ea4';
 
 export const Colors = {
-  light: {
-    text: '#11181C',
-    background: '#fff',
-    tint: tintColorLight,
-    icon: '#687076',
-    tabIconDefault: '#687076',
-    tabIconSelected: tintColorLight,
-  },
-  dark: {
-    text: '#ECEDEE',
-    background: '#151718',
-    tint: tintColorDark,
-    icon: '#9BA1A6',
-    tabIconDefault: '#9BA1A6',
-    tabIconSelected: tintColorDark,
-  },
+  text: '#11181C',
+  textDark: '#000000',
+  textLight: '#999999',
+  background: '#FFFBF8',
+  cardBackground: '#FFFFFF',
+  tint: tintColor,
+  icon: '#687076',
+  iconLight: '#666666',
+  tabIconDefault: '#687076',
+  tabIconSelected: tintColor,
+  border: '#E0E0E0',
+  borderLight: '#f0f0f0',
+  primary: '#000000',
+  primaryText: '#FFFFFF',
+  green: '#4CAF50',
+  red: '#F44336',
+  navbarBackground: '#1A1A1A',
+  navbarIcon: '#FFFFFF',
 };
 
 export const Fonts = Platform.select({
