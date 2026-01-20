@@ -1,6 +1,7 @@
 import { Redirect } from 'expo-router';
 
 export default function Index() {
-  return <Redirect href="/onboarding" />;
+  // Always redirect to welcome screen after splash
+  return <Redirect href="/welcome" />;
 }
 

@@ -279,6 +279,30 @@ const validatePhoneNumber = (phone: string, countryCode: string): { isValid: boo
   return { isValid: true, error: '' };
 };
 
+const validateEmail = (value: string): { isValid: boolean; error: string } => {
+  if (!value.trim()) {
+    return { isValid: false, error: 'Email is required' };
+  }
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(value.trim())) {
+    return { isValid: false, error: 'Please enter a valid email address' };
+  }
+  return { isValid: true, error: '' };
+};
+
+const validatePassword = (value: string): { isValid: boolean; error: string } => {
+  if (!value.trim()) {
+    return { isValid: false, error: 'Password is required' };
+  }
+  if (value.length < 8) {
+    return { isValid: false, error: 'Password must be at least 8 characters' };
+  }
+  if (value.length > 50) {
+    return { isValid: false, error: 'Password is too long' };
+  }
+  return { isValid: true, error: '' };
+};
+
 const OnboardingScreen = () => {
   const insets = useSafeAreaInsets();
   const [step, setStep] = useState(0);
@@ -286,6 +310,12 @@ const OnboardingScreen = () => {
   const [onboardingData, setOnboardingData] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState(false);
   const [profileCreated, setProfileCreated] = useState(false);
+  const [showCreateAccount, setShowCreateAccount] = useState(false);
+  const [accountLoading, setAccountLoading] = useState(false);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [accountError, setAccountError] = useState('');
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
   const [nationalitySearch, setNationalitySearch] = useState('');
   const [professionSearch, setProfessionSearch] = useState('');
@@ -316,6 +346,7 @@ const OnboardingScreen = () => {
     },
     { key: 'interests', title: 'What are your interests? (Select all that apply)', type: 'multiSelect', options: ['Travel', 'Music', 'Fitness', 'Food', 'Movies', 'Sports', 'Art', 'Reading', 'Gaming', 'Outdoor activities'] },
     { key: 'photos', title: 'Upload 3 photos', type: 'imageUpload', required: 3 },
+    { key: 'source', title: 'How did you hear about HIBO?', type: 'select', options: ['Instagram', 'Facebook', 'TikTok', 'YouTube', 'Friend', 'Other'] },
     { key: 'documentType', title: 'What document do you have?', type: 'select', options: ['Passport', 'Driver License', 'National ID'] },
   ];
 
@@ -341,7 +372,6 @@ const OnboardingScreen = () => {
     ...baseQuestions,
     ...dynamicQuestions,
     { key: 'bio', title: 'Tell us about yourself', type: 'input', keyboard: 'default' as const, placeholder: 'Write a short bio...' },
-    { key: 'source', title: 'How did you hear about HIBO?', type: 'select', options: ['Instagram', 'Facebook', 'TikTok', 'YouTube', 'Friend', 'Other'] },
   ], [dynamicQuestions]);
 
   // Request image picker permissions
@@ -601,8 +631,8 @@ const OnboardingScreen = () => {
     }
     
     if (step === questions.length - 1) {
-      // Last step - create profile
-      handleCreateProfile();
+      // Last step - show create account screen
+      setShowCreateAccount(true);
     } else {
       setStep(step + 1);
       setCurrentValue('');
@@ -611,11 +641,31 @@ const OnboardingScreen = () => {
   };
 
   const handleCreateProfile = async () => {
-    setLoading(true);
+    if (!email.trim() || !password.trim()) {
+      setAccountError('Please enter email and password');
+      return;
+    }
+
+    // Validate email and password
+    const emailValidation = validateEmail(email);
+    const passwordValidation = validatePassword(password);
+
+    if (!emailValidation.isValid) {
+      setAccountError(emailValidation.error);
+      return;
+    }
+
+    if (!passwordValidation.isValid) {
+      setAccountError(passwordValidation.error);
+      return;
+    }
+
+    setAccountError('');
+    setAccountLoading(true);
     
     // Simulate API call - replace with actual backend call
     setTimeout(() => {
-      setLoading(false);
+      setAccountLoading(false);
       setProfileCreated(true);
       
       // Navigate to home after 2 seconds
@@ -708,16 +758,20 @@ const OnboardingScreen = () => {
     } else {
       // Single selection
       setOnboardingData({ ...onboardingData, [key]: option });
-      // If documentType is selected, don't auto-proceed - let user see the upload steps
-      if (key === 'documentType') {
+      // Auto-proceed after selection (for source, it will show email/password next if social media)
         setTimeout(proceedToNextStep, 200);
-      } else {
-        setTimeout(proceedToNextStep, 200);
-      }
     }
   };
 
   const handleBack = () => {
+    if (showCreateAccount) {
+      // Go back from create account screen to last question
+      setShowCreateAccount(false);
+      setEmail('');
+      setPassword('');
+      setAccountError('');
+      return;
+    }
     if (step > 0) {
       setCurrentValue('');
       const prevKey = questions[step - 1].key;
@@ -803,11 +857,11 @@ const OnboardingScreen = () => {
   };
 
   const renderContent = () => {
-    if (loading) {
+    if (accountLoading) {
       return (
         <View style={styles.centeredResult}>
           <ActivityIndicator size="large" color={theme.black} />
-          <Text style={styles.loadingText}>Creating your profile...</Text>
+          <Text style={styles.loadingText}>Creating your account...</Text>
         </View>
       );
     }
@@ -823,6 +877,105 @@ const OnboardingScreen = () => {
           </View>
           <Text style={styles.successSubtext}>Your profile has been created successfully</Text>
         </View>
+      );
+    }
+
+    if (showCreateAccount) {
+      return (
+        <ScrollView 
+          contentContainerStyle={[styles.createAccountContainer, { paddingTop: Math.max(24, insets.top + 8), paddingBottom: Math.max(40, insets.bottom + 20) }]}
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.createAccountTitleContainer}>
+            <TouchableOpacity 
+              style={styles.createAccountBackButton}
+              onPress={handleBack}
+            >
+              <Ionicons name="arrow-back" size={24} color={theme.black} />
+            </TouchableOpacity>
+            <Text style={styles.createAccountTitle}>Create an account</Text>
+          </View>
+          <View style={{ width: '100%', marginBottom: 16 }}>
+            <Text style={styles.inputLabel}>Email</Text>
+            <TextInput
+              style={[styles.modalInput, { width: '100%' }]}
+              placeholder="Enter your email"
+              placeholderTextColor={theme.placeholder}
+              autoCapitalize="none"
+              keyboardType="email-address"
+              value={email}
+              onChangeText={(text) => {
+                setEmail(text);
+                if (text.trim() === '') {
+                  setAccountError('');
+                } else {
+                  const validationResult = validateEmail(text);
+                  if (!validationResult.isValid) {
+                    setAccountError(validationResult.error);
+                  } else {
+                    setAccountError('');
+                  }
+                }
+              }}
+            />
+          </View>
+          <View style={{ width: '100%', marginBottom: 20 }}>
+            <Text style={styles.inputLabel}>Password</Text>
+            <View style={styles.passwordInputContainer}>
+              <TextInput
+                style={[styles.modalInput, { width: '100%', paddingRight: 50 }]}
+                placeholder="Enter your password"
+                placeholderTextColor={theme.placeholder}
+                autoCapitalize="none"
+                secureTextEntry={!showPassword}
+                value={password}
+                onChangeText={(text) => {
+                  setPassword(text);
+                  if (text.trim() === '') {
+                    setAccountError('');
+                  } else {
+                    const validationResult = validatePassword(text);
+                    if (!validationResult.isValid) {
+                      setAccountError(validationResult.error);
+                    } else {
+                      setAccountError('');
+                    }
+                  }
+                }}
+              />
+              <TouchableOpacity
+                style={styles.passwordToggle}
+                onPress={() => setShowPassword(!showPassword)}
+              >
+                <Ionicons 
+                  name={showPassword ? "eye-off-outline" : "eye-outline"} 
+                  size={24} 
+                  color={theme.gray} 
+                />
+              </TouchableOpacity>
+            </View>
+          </View>
+          {!!accountError && (
+            <Text style={styles.accountErrorText}>{accountError}</Text>
+          )}
+          <TouchableOpacity 
+            style={[
+              styles.finalContinueButton, 
+              (accountLoading || !email.trim() || !password.trim() || !!accountError) && styles.continueButtonInactive
+            ]} 
+            onPress={handleCreateProfile}
+            disabled={accountLoading || !email.trim() || !password.trim() || !!accountError}
+          >
+            {accountLoading ? (
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <ActivityIndicator size="small" color={theme.white} style={{ marginRight: 8 }} />
+                <Text style={styles.finalContinueText}>Creating...</Text>
+              </View>
+            ) : (
+              <Text style={(accountLoading || !email.trim() || !password.trim() || !!accountError) ? [styles.finalContinueText, { color: theme.gray }] : styles.finalContinueText}>Create account</Text>
+            )}
+          </TouchableOpacity>
+        </ScrollView>
       );
     }
     
@@ -1387,7 +1540,7 @@ const OnboardingScreen = () => {
       keyboardVerticalOffset={0}
     >
       <StatusBar style="dark" />
-      {!profileCreated && !loading && step > 0 && (
+      {!profileCreated && !accountLoading && !showCreateAccount && step > 0 && (
         <TouchableOpacity 
           style={[styles.backButton, { top: Math.max(insets.top + 10, 50) }]} 
           onPress={handleBack}
@@ -1395,7 +1548,7 @@ const OnboardingScreen = () => {
           <Text style={styles.backIcon}>‹</Text>
         </TouchableOpacity>
       )}
-      {!profileCreated && !loading && (
+      {!profileCreated && !accountLoading && !showCreateAccount && (
         <View style={[styles.progressContainer, { paddingTop: Math.max(insets.top + 20, 60) }]}>
           <View style={styles.progressBar}>
             <View style={[styles.progressFill, { width: `${((step + 1) / questions.length) * 100}%` }]} />
@@ -1941,6 +2094,76 @@ const styles = StyleSheet.create({
     borderBottomWidth: 2,
     borderBottomColor: theme.black,
     paddingBottom: 10,
+  },
+  passwordInputContainer: {
+    width: '100%',
+    position: 'relative',
+  },
+  passwordToggle: {
+    position: 'absolute',
+    right: 15,
+    top: 12,
+    padding: 5,
+  },
+  createAccountContainer: {
+    flex: 1,
+    justifyContent: 'flex-start',
+    alignItems: 'stretch',
+    paddingHorizontal: 24,
+    paddingTop: 32,
+    backgroundColor: theme.primary,
+  },
+  createAccountTitleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 24,
+    width: '100%',
+  },
+  createAccountBackButton: {
+    marginRight: 12,
+    padding: 4,
+  },
+  createAccountTitle: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: theme.black,
+    textAlign: 'left',
+    flex: 1,
+  },
+  inputLabel: {
+    fontSize: 14,
+    color: theme.gray,
+    marginBottom: 8,
+    fontWeight: '500',
+  },
+  modalInput: {
+    borderWidth: 1,
+    borderColor: theme.lightGray,
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    fontSize: 16,
+    color: theme.black,
+    backgroundColor: theme.secondary,
+  },
+  accountErrorText: {
+    color: theme.error,
+    fontSize: 14,
+    marginBottom: 12,
+    fontWeight: '500',
+  },
+  finalContinueButton: {
+    backgroundColor: theme.buttonActive,
+    paddingVertical: 18,
+    borderRadius: 30,
+    alignItems: 'center',
+    width: '100%',
+    marginTop: 10,
+  },
+  finalContinueText: {
+    color: theme.white,
+    fontSize: 18,
+    fontWeight: '600',
   },
 });
 
