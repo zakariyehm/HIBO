@@ -29,9 +29,9 @@ const { width } = Dimensions.get('window');
 
 // Simple responsive sizing helpers based on device width
 const isSmallWidth = width < 360;
-const titleFontSize = isSmallWidth ? 24 : width < 400 ? 26 : 28;
-const optionFontSize = isSmallWidth ? 16 : 18;
-const inputFontSize = isSmallWidth ? 40 : width < 400 ? 46 : 52;
+const titleFontSize = isSmallWidth ? 20 : width < 400 ? 22 : 24;
+const optionFontSize = isSmallWidth ? 14 : 16;
+const inputFontSize = isSmallWidth ? 24 : width < 400 ? 28 : 32;
 const verticalGapAfterTitle = isSmallWidth ? 16 : 20;
 
 // Countries list for nationality selection
@@ -258,6 +258,27 @@ const validateNationalIdNumber = (value: string): { isValid: boolean; error: str
   return { isValid: true, error: '' };
 };
 
+const validatePhoneNumber = (phone: string, countryCode: string): { isValid: boolean; error: string } => {
+  if (!phone.trim()) {
+    return { isValid: false, error: 'Phone number is required' };
+  }
+  // Remove any spaces, dashes, or parentheses
+  const cleanedPhone = phone.replace(/\s|-|\(|\)/g, '');
+  // Check if it contains only digits
+  if (!/^\d+$/.test(cleanedPhone)) {
+    return { isValid: false, error: 'Phone number must contain only numbers' };
+  }
+  // Check minimum length (at least 7 digits)
+  if (cleanedPhone.length < 7) {
+    return { isValid: false, error: 'Phone number is too short' };
+  }
+  // Check maximum length (max 15 digits including country code)
+  if (cleanedPhone.length > 15) {
+    return { isValid: false, error: 'Phone number is too long' };
+  }
+  return { isValid: true, error: '' };
+};
+
 const OnboardingScreen = () => {
   const insets = useSafeAreaInsets();
   const [step, setStep] = useState(0);
@@ -268,17 +289,20 @@ const OnboardingScreen = () => {
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
   const [nationalitySearch, setNationalitySearch] = useState('');
   const [professionSearch, setProfessionSearch] = useState('');
+  const [countryCode, setCountryCode] = useState('+1');
+  const [phoneNumber, setPhoneNumber] = useState('');
 
   // Base questions
   const baseQuestions = [
     { key: 'firstName', title: "What's your first name?", type: 'input', keyboard: 'default' as const, placeholder: 'John' },
     { key: 'lastName', title: "What's your last name?", type: 'input', keyboard: 'default' as const, placeholder: 'Doe' },
+    { key: 'phoneNumber', title: "What's your phone number?", type: 'phoneInput' },
     { key: 'age', title: 'How old are you?', type: 'input', keyboard: 'numeric' as const, placeholder: '25' },
     { key: 'height', title: 'What\'s your height (cm)?', type: 'input', keyboard: 'numeric' as const, placeholder: '175' },
     { key: 'location', title: 'Where are you located?', type: 'input', keyboard: 'default' as const, placeholder: 'New York' },
     { key: 'profession', title: "What's your profession?", type: 'professionSelect' },
     { key: 'educationLevel', title: "What's your education level?", type: 'select', options: ['High school', 'Non-degree qualification', 'Undergraduate degree', 'Postgraduate degree', 'Doctorate', 'Other education level'] },
-    { key: 'nationality', title: "What's your nationality?", type: 'nationalitySelect', maxSelections: 2 },
+    { key: 'nationality', title: "What's your nationality?", type: 'nationalitySelect', maxSelections: 1 },
     { key: 'growUp', title: 'Where did you grow up?', type: 'input', keyboard: 'default' as const, placeholder: 'City, Country' },
     { key: 'smoke', title: 'Do you smoke?', type: 'select', options: ['Yes', 'No'] },
     { key: 'hasChildren', title: 'Do you have children?', type: 'select', options: ['Yes', 'No'] },
@@ -502,6 +526,9 @@ const OnboardingScreen = () => {
       case 'nationalIdNumber':
         validationResult = validateNationalIdNumber(value);
         break;
+      case 'phoneNumber':
+        validationResult = validatePhoneNumber(phoneNumber, countryCode);
+        break;
       default:
         return true;
     }
@@ -539,11 +566,11 @@ const OnboardingScreen = () => {
         return; // Don't proceed if less than 3 selections
       }
     }
-    // Validate nationalitySelect has at least 1 selection
+    // Validate nationalitySelect has exactly 1 selection
     if (currentQuestion.type === 'nationalitySelect') {
       const selections = onboardingData[currentQuestion.key] || [];
-      if (selections.length < 1) {
-        Alert.alert('Required', 'Please select at least one nationality');
+      if (selections.length !== 1) {
+        Alert.alert('Required', 'Please select your nationality');
         return;
       }
     }
@@ -599,9 +626,35 @@ const OnboardingScreen = () => {
   };
 
   const handleNextInput = () => {
+    const currentQuestion = questions[step];
+    
+    // Handle phone number separately
+    if (currentQuestion.type === 'phoneInput') {
+      const validationResult = validatePhoneNumber(phoneNumber, countryCode);
+      if (!validationResult.isValid) {
+        setValidationErrors(prev => ({
+          ...prev,
+          [currentQuestion.key]: validationResult.error
+        }));
+        return;
+      }
+      // Save phone number with country code
+      setOnboardingData({ 
+        ...onboardingData, 
+        [currentQuestion.key]: `${countryCode}${phoneNumber.trim()}` 
+      });
+      setPhoneNumber('');
+      setCountryCode('+1');
+      setValidationErrors(prev => ({
+        ...prev,
+        [currentQuestion.key]: ''
+      }));
+      proceedToNextStep();
+      return;
+    }
+    
     if (currentValue.trim() === '') return;
     
-    const currentQuestion = questions[step];
     const isValid = validateCurrentInput(currentValue);
     
     if (!isValid) return;
@@ -629,7 +682,7 @@ const OnboardingScreen = () => {
       // Handle multiple selections
       const currentSelections = onboardingData[key] || [];
       const maxSelections = questions[step].type === 'nationalitySelect' 
-        ? (questions[step].maxSelections || 2) 
+        ? 1
         : questions[step].type === 'personalitySelect'
         ? (questions[step].maxSelections || 5)
         : Infinity;
@@ -639,8 +692,11 @@ const OnboardingScreen = () => {
         // Remove if already selected
         newSelections = currentSelections.filter((item: string) => item !== option);
       } else {
-        // Add if not selected and under max limit
-        if (currentSelections.length < maxSelections) {
+        // For nationalitySelect, replace the selection (only 1 allowed)
+        if (questions[step].type === 'nationalitySelect') {
+          newSelections = [option];
+        } else if (currentSelections.length < maxSelections) {
+          // Add if not selected and under max limit
           newSelections = [...currentSelections, option];
         } else {
           // Replace oldest selection if at max
@@ -679,6 +735,9 @@ const OnboardingScreen = () => {
   // Check if current input is valid
   const isCurrentInputValid = () => {
     const currentQuestion = questions[step];
+    if (currentQuestion.type === 'phoneInput') {
+      return validatePhoneNumber(phoneNumber, countryCode).isValid;
+    }
     if (currentQuestion.type === 'select' || currentQuestion.type === 'multiSelect' || currentQuestion.type === 'nationalitySelect' || currentQuestion.type === 'personalitySelect' || currentQuestion.type === 'marriageIntentions' || currentQuestion.type === 'professionSelect') {
       if (currentQuestion.type === 'marriageIntentions') {
         const knowSomeone = onboardingData[currentQuestion.key + '_know'] || '';
@@ -695,8 +754,8 @@ const OnboardingScreen = () => {
       }
       if (currentQuestion.type === 'nationalitySelect') {
         const selections = onboardingData[currentQuestion.key] || [];
-        // Require at least 1 selection, max 2
-        return selections.length >= 1 && selections.length <= (currentQuestion.maxSelections || 2);
+        // Require exactly 1 selection
+        return selections.length === 1;
       }
       if (currentQuestion.type === 'personalitySelect') {
         const selections = onboardingData[currentQuestion.key] || [];
@@ -777,7 +836,7 @@ const OnboardingScreen = () => {
         <Text style={styles.questionText}>{currentQuestion.title}</Text>
         {currentQuestion.type === 'nationalitySelect' ? (
           <View style={styles.nationalityContainer}>
-            <Text style={styles.nationalitySubtitle}>Please tell us up to two countries you hold citizenship with.</Text>
+            <Text style={styles.nationalitySubtitle}>Please select your nationality.</Text>
             <View style={styles.searchContainer}>
               <Ionicons name="search" size={20} color={theme.gray} style={styles.searchIcon} />
               <TextInput
@@ -1175,6 +1234,66 @@ const OnboardingScreen = () => {
               </View>
             </View>
           </ScrollView>
+        ) : currentQuestion.type === 'phoneInput' ? (
+          <>
+            <View style={styles.phoneInputContainer}>
+              <View style={styles.countryCodeContainer}>
+                <TextInput
+                  style={styles.countryCodeInput}
+                  value={countryCode}
+                  onChangeText={setCountryCode}
+                  keyboardType="phone-pad"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  placeholder="+1"
+                  placeholderTextColor={theme.placeholder}
+                  maxLength={5}
+                />
+              </View>
+              <TextInput
+                style={[styles.phoneNumberInput, currentError && styles.textInputError]}
+                value={phoneNumber}
+                onChangeText={(text) => {
+                  setPhoneNumber(text);
+                  if (text.trim() === '') {
+                    setValidationErrors(prev => ({
+                      ...prev,
+                      [currentQuestion.key]: ''
+                    }));
+                  } else {
+                    const validationResult = validatePhoneNumber(text, countryCode);
+                    setValidationErrors(prev => ({
+                      ...prev,
+                      [currentQuestion.key]: validationResult.error
+                    }));
+                  }
+                }}
+                keyboardType="phone-pad"
+                autoCapitalize="none"
+                autoCorrect={false}
+                autoFocus={true}
+                selectionColor={theme.black}
+                placeholder="1234567890"
+                placeholderTextColor={theme.placeholder}
+                maxLength={15}
+              />
+            </View>
+            {currentError && (
+              <Text style={styles.errorText}>{currentError}</Text>
+            )}
+            <TouchableOpacity 
+              style={[
+                styles.continueButton, 
+                isCurrentInputValid() ? styles.continueButtonActive : styles.continueButtonInactive
+              ]} 
+              onPress={handleNextInput} 
+              disabled={!isCurrentInputValid()}
+            >
+              <Text style={isCurrentInputValid() ? styles.continueTextActive : styles.continueTextInactive}>
+                continue
+              </Text>
+            </TouchableOpacity>
+          </>
         ) : (
           <>
             <TextInput
@@ -1235,8 +1354,8 @@ const OnboardingScreen = () => {
                   ? `Select (${(onboardingData[currentQuestion.key] || []).length})`
                   : currentQuestion.type === 'nationalitySelect'
                   ? (isCurrentInputValid()
-                      ? `Confirm (${(onboardingData[currentQuestion.key] || []).length} selected)`
-                      : `Select nationality (${(onboardingData[currentQuestion.key] || []).length}/2)`)
+                      ? `continue`
+                      : `Select nationality`)
                   : isMultiSelect 
                   ? (isCurrentInputValid() 
                       ? `continue (${currentSelections.length} selected)`
@@ -1393,10 +1512,10 @@ const styles = StyleSheet.create({
   },
   optionButton: {
     width: '100%',
-    paddingVertical: 18,
+    paddingVertical: 12,
     backgroundColor: theme.secondary,
-    borderRadius: 14,
-    marginBottom: 14,
+    borderRadius: 12,
+    marginBottom: 10,
     alignItems: 'center',
     borderWidth: 1,
     borderColor: theme.lightGray,
@@ -1415,9 +1534,9 @@ const styles = StyleSheet.create({
     borderColor: theme.black,
   },
   optionText: {
-    fontSize: optionFontSize,
+    fontSize: 15,
     color: theme.black,
-    fontWeight: '600',
+    fontWeight: '500',
   },
   selectedOptionText: {
     color: theme.white,
@@ -1657,7 +1776,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 15,
+    paddingVertical: 12,
     paddingHorizontal: 15,
     backgroundColor: theme.secondary,
     borderRadius: 12,
@@ -1670,7 +1789,7 @@ const styles = StyleSheet.create({
     borderColor: theme.black,
   },
   nationalityText: {
-    fontSize: 16,
+    fontSize: 15,
     color: theme.black,
     fontWeight: '500',
   },
@@ -1682,10 +1801,10 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   personalitySubtitle: {
-    fontSize: 16,
+    fontSize: 14,
     color: theme.black,
     textAlign: 'center',
-    marginBottom: 20,
+    marginBottom: 16,
     paddingHorizontal: 20,
     fontWeight: '500',
   },
@@ -1699,11 +1818,11 @@ const styles = StyleSheet.create({
     width: '48%',
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 14,
+    paddingVertical: 12,
     paddingHorizontal: 12,
     backgroundColor: theme.secondary,
     borderRadius: 12,
-    marginBottom: 12,
+    marginBottom: 10,
     borderWidth: 1,
     borderColor: theme.lightGray,
   },
@@ -1712,7 +1831,7 @@ const styles = StyleSheet.create({
     borderColor: theme.black,
   },
   personalityEmoji: {
-    fontSize: 20,
+    fontSize: 18,
     marginRight: 8,
   },
   personalityText: {
@@ -1741,11 +1860,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     width: '100%',
-    paddingVertical: 16,
+    paddingVertical: 12,
     paddingHorizontal: 16,
     backgroundColor: theme.secondary,
     borderRadius: 12,
-    marginBottom: 12,
+    marginBottom: 10,
     borderWidth: 1,
     borderColor: theme.lightGray,
   },
@@ -1757,7 +1876,7 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   marriageOptionText: {
-    fontSize: 16,
+    fontSize: 15,
     color: theme.black,
     fontWeight: '500',
   },
@@ -1773,11 +1892,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     width: '100%',
-    paddingVertical: 16,
+    paddingVertical: 12,
     paddingHorizontal: 16,
     backgroundColor: theme.secondary,
     borderRadius: 12,
-    marginBottom: 8,
+    marginBottom: 10,
     borderWidth: 1,
     borderColor: theme.lightGray,
   },
@@ -1786,13 +1905,42 @@ const styles = StyleSheet.create({
     borderColor: theme.buttonActive,
   },
   professionText: {
-    fontSize: 16,
+    fontSize: 15,
     color: theme.black,
     fontWeight: '500',
   },
   selectedProfessionText: {
     color: theme.buttonActive,
     fontWeight: '600',
+  },
+  phoneInputContainer: {
+    flexDirection: 'row',
+    width: '100%',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  countryCodeContainer: {
+    marginRight: 12,
+  },
+  countryCodeInput: {
+    color: theme.black,
+    fontSize: 20,
+    fontWeight: '400',
+    textAlign: 'center',
+    borderBottomWidth: 2,
+    borderBottomColor: theme.black,
+    paddingBottom: 10,
+    width: 80,
+  },
+  phoneNumberInput: {
+    flex: 1,
+    color: theme.black,
+    fontSize: 20,
+    fontWeight: '400',
+    textAlign: 'center',
+    borderBottomWidth: 2,
+    borderBottomColor: theme.black,
+    paddingBottom: 10,
   },
 });
 
