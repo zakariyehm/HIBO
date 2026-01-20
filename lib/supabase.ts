@@ -1,0 +1,267 @@
+/**
+ * Supabase Client Configuration
+ * Handles authentication and database operations
+ */
+
+import 'react-native-url-polyfill/auto';
+import { createClient } from '@supabase/supabase-js';
+import { Platform } from 'react-native';
+
+// Supabase configuration
+const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
+const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
+
+// Simple in-memory storage for Expo Go (sessions won't persist between app restarts)
+// For production, use a development build with proper AsyncStorage
+const memoryStorage: { [key: string]: string } = {};
+
+const ExpoGoStorageAdapter = {
+  getItem: async (key: string) => {
+    return memoryStorage[key] || null;
+  },
+  setItem: async (key: string, value: string) => {
+    memoryStorage[key] = value;
+  },
+  removeItem: async (key: string) => {
+    delete memoryStorage[key];
+  },
+};
+
+// Create Supabase client
+export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  auth: {
+    storage: ExpoGoStorageAdapter as any,
+    autoRefreshToken: true,
+    persistSession: false, // Disabled for Expo Go
+    detectSessionInUrl: false,
+  },
+});
+
+// Database types for type safety
+export interface UserProfile {
+  id: string;
+  email: string;
+  first_name: string;
+  last_name: string;
+  phone_number: string;
+  age: number;
+  height: number;
+  location: string;
+  profession: string;
+  education_level: string;
+  nationality: string[];
+  grow_up: string;
+  smoke: string;
+  has_children: string;
+  gender: string;
+  interested_in: string;
+  looking_for: string;
+  personality: string[];
+  marriage_know_time: string;
+  marriage_married_time: string;
+  interests: string[];
+  photos: string[];
+  source: string;
+  document_type: string;
+  passport?: string;
+  driver_license_front?: string;
+  driver_license_back?: string;
+  nationality_id_front?: string;
+  nationality_id_back?: string;
+  national_id_number?: string;
+  bio: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+// Auth functions
+export const signUpWithEmail = async (email: string, password: string) => {
+  const { data, error } = await supabase.auth.signUp({
+    email,
+    password,
+    options: {
+      // Auto-confirm for development (no email verification required)
+      emailRedirectTo: undefined,
+    }
+  });
+  
+  console.log('📧 Signup response:', { 
+    hasUser: !!data.user, 
+    hasSession: !!data.session,
+    userId: data.user?.id 
+  });
+  
+  // Wait for session to be established
+  if (data.session) {
+    console.log('✅ Session found, setting it...');
+    await supabase.auth.setSession({
+      access_token: data.session.access_token,
+      refresh_token: data.session.refresh_token,
+    });
+  } else {
+    console.log('⚠️  NO SESSION RETURNED! Email confirmation may be required.');
+  }
+  
+  return { data, error };
+};
+
+export const signInWithEmail = async (email: string, password: string) => {
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email,
+    password,
+  });
+  return { data, error };
+};
+
+export const signOut = async () => {
+  const { error } = await supabase.auth.signOut();
+  return { error };
+};
+
+export const getCurrentUser = async () => {
+  const { data: { user }, error } = await supabase.auth.getUser();
+  return { user, error };
+};
+
+// Database functions
+export const createUserProfile = async (userId: string, profileData: Partial<UserProfile>) => {
+  // Check session status
+  const { data: { session } } = await supabase.auth.getSession();
+  console.log('🔐 Creating profile:', { 
+    userId, 
+    hasSession: !!session,
+    sessionUser: session?.user?.id 
+  });
+  
+  const { data, error } = await supabase
+    .from('profiles')
+    .insert([
+      {
+        id: userId,
+        ...profileData,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+    ])
+    .select()
+    .single();
+  
+  if (error) {
+    console.error('❌ Profile insert error:', error);
+  } else {
+    console.log('✅ Profile created successfully!');
+  }
+  
+  return { data, error };
+};
+
+export const updateUserProfile = async (userId: string, profileData: Partial<UserProfile>) => {
+  const { data, error } = await supabase
+    .from('profiles')
+    .update({
+      ...profileData,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', userId)
+    .select()
+    .single();
+  
+  return { data, error };
+};
+
+export const getUserProfile = async (userId: string) => {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('id', userId)
+    .single();
+  
+  return { data, error };
+};
+
+// Upload images to Supabase Storage
+export const uploadImage = async (userId: string, imageUri: string, imageName: string, folder: string = 'photos') => {
+  try {
+    console.log('🔄 Starting upload:', imageName);
+    console.log('📍 File URI:', imageUri);
+    
+    // Skip upload if already a public URL (already uploaded)
+    if (imageUri.startsWith('http://') || imageUri.startsWith('https://')) {
+      console.log('⚠️  Image already uploaded, skipping:', imageUri);
+      return { data: { path: imageUri, publicUrl: imageUri }, error: null };
+    }
+    
+    // Extract file extension from URI or use default
+    const uriParts = imageUri.split('.');
+    const fileExtension = uriParts[uriParts.length - 1];
+    const mimeType = `image/${fileExtension === 'png' ? 'png' : 'jpeg'}`;
+    
+    console.log('📦 File type:', mimeType);
+    
+    // Generate unique filename with correct extension
+    const timestamp = Date.now();
+    const randomId = Math.random().toString(36).substring(7);
+    const fileName = `photo_${timestamp}_${randomId}.${fileExtension}`;
+    const filePath = `${folder}/${userId}/${fileName}`;
+    
+    console.log('📤 Preparing upload to:', filePath);
+    console.log('🔄 Fetching file data from URI...');
+    
+    // Fetch actual file data as ArrayBuffer (works in React Native)
+    const response = await fetch(imageUri);
+    const arrayBuffer = await response.arrayBuffer();
+    
+    console.log('✅ ArrayBuffer created, size:', arrayBuffer.byteLength, 'bytes');
+    console.log('📤 Uploading to Supabase...');
+    
+    // Upload ArrayBuffer to Supabase Storage
+    const { data, error } = await supabase.storage
+      .from('user-uploads')
+      .upload(filePath, arrayBuffer, {
+        contentType: mimeType,
+        upsert: true,
+      });
+    
+    if (error) {
+      console.error('❌ Upload error:', error);
+      return { data: null, error };
+    }
+    
+    console.log('✅ Upload successful:', filePath);
+    
+    // Get public URL
+    const { data: publicUrlData } = supabase.storage
+      .from('user-uploads')
+      .getPublicUrl(filePath);
+    
+    console.log('🌐 Public URL:', publicUrlData.publicUrl);
+    
+    return { data: { path: filePath, publicUrl: publicUrlData.publicUrl }, error: null };
+  } catch (error: any) {
+    console.error('❌ Upload catch error:', error);
+    return { data: null, error: { message: error.message || 'Upload failed' } };
+  }
+};
+
+// Upload multiple photos
+export const uploadPhotos = async (userId: string, photos: string[]) => {
+  const uploadPromises = photos.map((photo, index) => 
+    uploadImage(userId, photo, `photo_${index + 1}_${Date.now()}.jpg`, 'photos')
+  );
+  
+  const results = await Promise.all(uploadPromises);
+  
+  const errors = results.filter(r => r.error);
+  if (errors.length > 0) {
+    return { data: null, error: errors[0].error };
+  }
+  
+  const photoUrls = results.map(r => r.data?.publicUrl).filter(Boolean);
+  return { data: photoUrls, error: null };
+};
+
+// Upload documents
+export const uploadDocument = async (userId: string, documentUri: string, documentName: string) => {
+  return uploadImage(userId, documentUri, documentName, 'documents');
+};
+

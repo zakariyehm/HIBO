@@ -4,6 +4,12 @@
  */
 
 import { Colors } from '@/constants/theme';
+import {
+    createUserProfile,
+    signUpWithEmail,
+    uploadDocument,
+    uploadPhotos
+} from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
@@ -11,17 +17,17 @@ import { router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import React, { useMemo, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  Dimensions,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    Dimensions,
+    KeyboardAvoidingView,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -663,16 +669,187 @@ const OnboardingScreen = () => {
     setAccountError('');
     setAccountLoading(true);
     
-    // Simulate API call - replace with actual backend call
-    setTimeout(() => {
+    try {
+      // Step 1: Sign up user with Supabase Auth
+      const { data: authData, error: authError } = await signUpWithEmail(email.trim(), password);
+      
+      if (authError) {
+        console.error('Auth error:', authError);
+        setAccountError(authError.message || 'Failed to create account. Please try again.');
+        setAccountLoading(false);
+        return;
+      }
+
+      if (!authData.user) {
+        setAccountError('Failed to create account. Please try again.');
+        setAccountLoading(false);
+        return;
+      }
+
+      const userId = authData.user.id;
+
+      // Wait for session to be fully established
+      console.log('✅ Account created! Waiting for session...');
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      // Step 2: Upload photos to Supabase Storage
+      // Validate photos before upload
+      if (!onboardingData.photos || onboardingData.photos.length < 3) {
+        console.error('❌ Need at least 3 photos');
+        Alert.alert('Photos Required', 'Please add at least 3 photos to continue.');
+        setLoading(false);
+        return;
+      }
+      
+      // Upload photos to Supabase Storage
+      console.log('📸 Uploading', onboardingData.photos.length, 'photos...');
+      
+      const { data: photoData, error: photoError } = await uploadPhotos(userId, onboardingData.photos);
+      
+      if (photoError) {
+        console.error('❌ Photo upload error:', photoError);
+        Alert.alert(
+          'Photo Upload Failed',
+          'Failed to upload your photos. Please check your connection and try again.',
+          [
+            {
+              text: 'Cancel',
+              style: 'cancel',
+              onPress: () => {
+                setLoading(false);
+              }
+            },
+            {
+              text: 'Retry',
+              onPress: () => {
+                handleCreateProfile();
+              }
+            }
+          ]
+        );
+        setLoading(false);
+        return;
+      }
+      
+      if (!photoData || photoData.length === 0) {
+        console.error('❌ No photo URLs returned');
+        Alert.alert('Upload Error', 'Failed to get photo URLs. Please try again.');
+        setLoading(false);
+        return;
+      }
+      
+      const uploadedPhotoUrls = photoData as string[];
+      console.log('✅ Photos uploaded successfully!', uploadedPhotoUrls.length, 'photos');
+      console.log('📸 Photo URLs:', uploadedPhotoUrls);
+
+      // Step 3: Upload documents to Supabase Storage
+      let documentUrls: Record<string, string> = {};
+      console.log('📄 Uploading documents...');
+      
+      if (onboardingData.passport) {
+        const { data: passportData, error: passportError } = await uploadDocument(userId, onboardingData.passport, `passport_${Date.now()}.jpg`);
+        if (passportError) {
+          console.error('❌ Passport upload error:', passportError);
+        } else if (passportData?.publicUrl) {
+          documentUrls.passport = passportData.publicUrl;
+          console.log('✅ Passport uploaded');
+        }
+      }
+      
+      if (onboardingData.driverLicenseFront) {
+        const { data: dlFrontData, error: dlFrontError } = await uploadDocument(userId, onboardingData.driverLicenseFront, `dl_front_${Date.now()}.jpg`);
+        if (dlFrontError) {
+          console.error('❌ Driver license front upload error:', dlFrontError);
+        } else if (dlFrontData?.publicUrl) {
+          documentUrls.driver_license_front = dlFrontData.publicUrl;
+          console.log('✅ Driver license front uploaded');
+        }
+      }
+      
+      if (onboardingData.driverLicenseBack) {
+        const { data: dlBackData, error: dlBackError } = await uploadDocument(userId, onboardingData.driverLicenseBack, `dl_back_${Date.now()}.jpg`);
+        if (dlBackError) {
+          console.error('❌ Driver license back upload error:', dlBackError);
+        } else if (dlBackData?.publicUrl) {
+          documentUrls.driver_license_back = dlBackData.publicUrl;
+          console.log('✅ Driver license back uploaded');
+        }
+      }
+      
+      if (onboardingData.nationalityIdFront) {
+        const { data: nidFrontData, error: nidFrontError } = await uploadDocument(userId, onboardingData.nationalityIdFront, `nid_front_${Date.now()}.jpg`);
+        if (nidFrontError) {
+          console.error('❌ Nationality ID front upload error:', nidFrontError);
+        } else if (nidFrontData?.publicUrl) {
+          documentUrls.nationality_id_front = nidFrontData.publicUrl;
+          console.log('✅ Nationality ID front uploaded');
+        }
+      }
+      
+      if (onboardingData.nationalityIdBack) {
+        const { data: nidBackData, error: nidBackError } = await uploadDocument(userId, onboardingData.nationalityIdBack, `nid_back_${Date.now()}.jpg`);
+        if (nidBackError) {
+          console.error('❌ Nationality ID back upload error:', nidBackError);
+        } else if (nidBackData?.publicUrl) {
+          documentUrls.nationality_id_back = nidBackData.publicUrl;
+          console.log('✅ Nationality ID back uploaded');
+        }
+      }
+
+      // Step 4: Prepare profile data
+      const profileData = {
+        email: email.trim(),
+        first_name: onboardingData.firstName || '',
+        last_name: onboardingData.lastName || '',
+        phone_number: onboardingData.phoneNumber || '',
+        age: parseInt(onboardingData.age) || 18,
+        height: parseInt(onboardingData.height) || 170,
+        location: onboardingData.location || '',
+        profession: onboardingData.profession || '',
+        education_level: onboardingData.educationLevel || '',
+        nationality: onboardingData.nationality || [],
+        grow_up: onboardingData.growUp || '',
+        smoke: onboardingData.smoke || '',
+        has_children: onboardingData.hasChildren || '',
+        gender: onboardingData.gender || '',
+        interested_in: onboardingData.interestedIn || '',
+        looking_for: onboardingData.lookingFor || '',
+        personality: onboardingData.personality || [],
+        marriage_know_time: onboardingData.marriageIntentions_know || '',
+        marriage_married_time: onboardingData.marriageIntentions_married || '',
+        interests: onboardingData.interests || [],
+        photos: uploadedPhotoUrls,
+        source: onboardingData.source || '',
+        document_type: onboardingData.documentType || '',
+        ...documentUrls,
+        national_id_number: onboardingData.nationalIdNumber || null,
+        bio: onboardingData.bio || '',
+      };
+
+      // Step 5: Create user profile in database
+      const { data: profileResult, error: profileError } = await createUserProfile(userId, profileData);
+      
+      if (profileError) {
+        console.error('Profile creation error:', profileError);
+        setAccountError('Account created but failed to save profile. Please contact support.');
+        setAccountLoading(false);
+        return;
+      }
+
+      // Success!
+      console.log('🎉 Profile creation complete! Navigating to home...');
       setAccountLoading(false);
       setProfileCreated(true);
       
-      // Navigate to home after 2 seconds
-      setTimeout(() => {
-        router.replace('/(tabs)');
-      }, 2000);
-    }, 1500);
+      // Navigate to home immediately
+      console.log('🚀 Attempting navigation to home screen...');
+      router.replace('/(tabs)');
+      
+    } catch (error: any) {
+      console.error('Error creating profile:', error);
+      setAccountError(error.message || 'An unexpected error occurred. Please try again.');
+      setAccountLoading(false);
+    }
   };
 
   const handleNextInput = () => {

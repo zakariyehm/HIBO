@@ -4,9 +4,11 @@
  */
 
 import { Colors } from '@/constants/theme';
+import { getUserProfile, signOut, supabase, uploadPhotos } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
+import { router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useState } from 'react';
 import {
@@ -40,28 +42,39 @@ const theme = {
 };
 
 interface UserProfile {
-  firstName?: string;
-  lastName?: string;
-  name?: string;
-  age?: string | number;
-  height?: string | number;
-  location?: string;
-  gender?: string;
-  interestedIn?: string;
-  lookingFor?: string;
-  profession?: string;
-  educationLevel?: string;
-  nationality?: string[];
-  growUp?: string;
-  smoke?: string;
-  hasChildren?: string;
-  personality?: string[];
-  marriageKnow?: string;
-  marriageWithin?: string;
-  interests?: string[];
-  bio?: string;
-  photos?: string[];
+  id?: string;
   email?: string;
+  first_name?: string;
+  last_name?: string;
+  phone_number?: string;
+  age?: number;
+  height?: number;
+  location?: string;
+  profession?: string;
+  education_level?: string;
+  nationality?: string[];
+  grow_up?: string;
+  smoke?: string;
+  has_children?: string;
+  gender?: string;
+  interested_in?: string;
+  looking_for?: string;
+  personality?: string[];
+  marriage_know_time?: string;
+  marriage_married_time?: string;
+  interests?: string[];
+  photos?: string[];
+  source?: string;
+  document_type?: string;
+  passport?: string;
+  driver_license_front?: string;
+  driver_license_back?: string;
+  nationality_id_front?: string;
+  nationality_id_back?: string;
+  national_id_number?: string;
+  bio?: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export default function ProfileScreen() {
@@ -69,7 +82,11 @@ export default function ProfileScreen() {
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [editingProfile, setEditingProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState<'edit' | 'view'>('view');
+  const [newPhotos, setNewPhotos] = useState<string[]>([]); // Track newly added/changed photos
+  const [imageLoadingStates, setImageLoadingStates] = useState<Record<number, boolean>>({});
+  const [imageErrors, setImageErrors] = useState<Record<number, boolean>>({});
 
   // Request image permissions
   const requestImagePermissions = async () => {
@@ -113,13 +130,21 @@ export default function ProfileScreen() {
       });
 
       if (!result.canceled && result.assets && result.assets.length > 0 && editingProfile) {
-        const newPhotos = [...(editingProfile.photos || [])];
-        if (index !== undefined && index < newPhotos.length) {
-          newPhotos[index] = result.assets[0].uri;
+        const updatedPhotos = [...(editingProfile.photos || [])];
+        const localUri = result.assets[0].uri;
+        
+        if (index !== undefined && index < updatedPhotos.length) {
+          updatedPhotos[index] = localUri;
         } else {
-          newPhotos.push(result.assets[0].uri);
+          updatedPhotos.push(localUri);
         }
-        setEditingProfile({ ...editingProfile, photos: newPhotos });
+        
+        setEditingProfile({ ...editingProfile, photos: updatedPhotos });
+        
+        // Track this as a new photo that needs upload
+        if (!newPhotos.includes(localUri)) {
+          setNewPhotos([...newPhotos, localUri]);
+        }
       }
     } catch (error) {
       Alert.alert('Error', 'Failed to pick image from gallery');
@@ -141,13 +166,21 @@ export default function ProfileScreen() {
       });
 
       if (!result.canceled && result.assets && result.assets.length > 0 && editingProfile) {
-        const newPhotos = [...(editingProfile.photos || [])];
-        if (index !== undefined && index < newPhotos.length) {
-          newPhotos[index] = result.assets[0].uri;
+        const updatedPhotos = [...(editingProfile.photos || [])];
+        const localUri = result.assets[0].uri;
+        
+        if (index !== undefined && index < updatedPhotos.length) {
+          updatedPhotos[index] = localUri;
         } else {
-          newPhotos.push(result.assets[0].uri);
+          updatedPhotos.push(localUri);
         }
-        setEditingProfile({ ...editingProfile, photos: newPhotos });
+        
+        setEditingProfile({ ...editingProfile, photos: updatedPhotos });
+        
+        // Track this as a new photo that needs upload
+        if (!newPhotos.includes(localUri)) {
+          setNewPhotos([...newPhotos, localUri]);
+        }
       }
     } catch (error) {
       Alert.alert('Error', 'Failed to take photo');
@@ -156,20 +189,126 @@ export default function ProfileScreen() {
 
   const handleRemovePhoto = (index: number) => {
     if (editingProfile && editingProfile.photos) {
+      // Don't allow removal if it would result in less than 3 photos
+      if (editingProfile.photos.length <= 3) {
+        Alert.alert('Minimum Photos', 'You need at least 3 photos in your profile.');
+        return;
+      }
+      
       const newPhotos = editingProfile.photos.filter((_, i) => i !== index);
       setEditingProfile({ ...editingProfile, photos: newPhotos });
     }
   };
 
-  const handleSave = () => {
-    // TODO: Save to Convex/backend
-    setUserProfile(editingProfile);
-    setActiveTab('view');
-    Alert.alert('Success', 'Profile updated successfully!');
+  const handleSave = async () => {
+    if (!editingProfile || !userProfile?.id) {
+      Alert.alert('Error', 'No profile data to save');
+      return;
+    }
+    
+    try {
+      setSaving(true);
+      console.log('💾 Starting save process...');
+      
+      // Filter out placeholder photos and separate local vs remote
+      let finalPhotoUrls = [...(editingProfile.photos || [])];
+      const localPhotos = finalPhotoUrls.filter(photo => 
+        photo && !photo.startsWith('http') && !photo.startsWith('https')
+      );
+      const remotePhotos = finalPhotoUrls.filter(photo => 
+        photo && (photo.startsWith('http') || photo.startsWith('https'))
+      );
+      
+      console.log('📊 Photos breakdown:');
+      console.log('  - Total:', finalPhotoUrls.length);
+      console.log('  - Local (need upload):', localPhotos.length);
+      console.log('  - Remote (already uploaded):', remotePhotos.length);
+      
+      // Upload local photos if any
+      if (localPhotos.length > 0) {
+        console.log('📸 Uploading', localPhotos.length, 'new photos...');
+        
+        const { data: uploadedUrls, error: uploadError } = await uploadPhotos(
+          userProfile.id,
+          localPhotos
+        );
+        
+        if (uploadError) {
+          console.error('❌ Photo upload error:', uploadError);
+          Alert.alert('Upload Error', 'Failed to upload photos. Please check your connection and try again.');
+          setSaving(false);
+          return;
+        }
+        
+        if (uploadedUrls && uploadedUrls.length > 0) {
+          console.log('✅ Photos uploaded successfully:', uploadedUrls.length);
+          
+          // Replace local URIs with uploaded URLs in the correct positions
+          finalPhotoUrls = finalPhotoUrls.map(photo => {
+            if (photo && !photo.startsWith('http')) {
+              const index = localPhotos.indexOf(photo);
+              if (index !== -1 && uploadedUrls[index]) {
+                return uploadedUrls[index];
+              }
+            }
+            return photo;
+          });
+        }
+      }
+      
+      // Filter out any invalid URLs
+      finalPhotoUrls = finalPhotoUrls.filter(photo => 
+        photo && (photo.startsWith('http') || photo.startsWith('https'))
+      );
+      
+      // Validate minimum 3 photos before saving
+      if (finalPhotoUrls.length < 3) {
+        console.error('❌ Need at least 3 photos, have:', finalPhotoUrls.length);
+        Alert.alert('Minimum Photos Required', 'You need at least 3 photos in your profile.');
+        setSaving(false);
+        return;
+      }
+      
+      console.log('📤 Saving profile with', finalPhotoUrls.length, 'photos');
+      console.log('📸 Final photo URLs:', finalPhotoUrls);
+      
+      // Update profile in Supabase
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .update({
+          photos: finalPhotoUrls,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', userProfile.id);
+      
+      if (updateError) {
+        console.error('❌ Profile update error:', updateError);
+        Alert.alert('Database Error', 'Failed to save profile. Please try again.');
+        setSaving(false);
+        return;
+      }
+      
+      console.log('✅ Profile updated successfully in database');
+      
+      // Update local state
+      const updatedProfile = { ...editingProfile, photos: finalPhotoUrls };
+      setUserProfile(updatedProfile);
+      setEditingProfile(updatedProfile);
+      setNewPhotos([]); // Clear new photos list
+      setActiveTab('view');
+      setSaving(false);
+      
+      Alert.alert('Success! 🎉', 'Your profile has been updated successfully!');
+    } catch (error: any) {
+      console.error('❌ Save error:', error);
+      Alert.alert('Error', error.message || 'An unexpected error occurred. Please try again.');
+      setSaving(false);
+    }
   };
 
   const handleCancel = () => {
     setEditingProfile(userProfile);
+    setNewPhotos([]); // Clear new photos
     setActiveTab('view');
   };
 
@@ -180,43 +319,115 @@ export default function ProfileScreen() {
     setActiveTab(tab);
   };
 
-  // TODO: Replace with actual data fetching from Convex
-  // const { userSession } = useAuth();
-  // const userId = userSession?.userId as Id<"users"> | undefined;
-  // const userData = useQuery(api.users.get, userId ? { userId } : "skip");
+  const handleLogout = async () => {
+    Alert.alert(
+      'Logout',
+      'Are you sure you want to logout?',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Logout',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              console.log('🔓 Logging out...');
+              const { error } = await signOut();
+              
+              if (error) {
+                console.error('❌ Logout error:', error);
+                Alert.alert('Error', 'Failed to logout. Please try again.');
+                return;
+              }
+              
+              console.log('✅ Logged out successfully');
+              // Navigate to welcome screen
+              router.replace('/welcome');
+            } catch (error: any) {
+              console.error('❌ Logout error:', error);
+              Alert.alert('Error', 'Failed to logout. Please try again.');
+            }
+          },
+        },
+      ],
+      { cancelable: true }
+    );
+  };
 
+  // Fetch user profile data from Supabase
   useEffect(() => {
-    // Simulate data loading - replace with actual Convex query
-    setTimeout(() => {
-      setUserProfile({
-        firstName: 'John',
-        lastName: 'Doe',
-        age: 28,
-        height: 175,
-        location: 'New York, USA',
-        gender: 'Male',
-        interestedIn: 'Women',
-        lookingFor: 'Serious relationship',
-        profession: 'Software Engineer',
-        educationLevel: 'Undergraduate degree',
-        nationality: ['American'],
-        growUp: 'Boston, USA',
-        smoke: 'No',
-        hasChildren: 'No',
-        personality: ['Adventurous', 'Ambitious', 'Creative'],
-        marriageKnow: '1-2 years',
-        marriageWithin: '3-4 years',
-        interests: ['Travel', 'Music', 'Fitness', 'Food'],
-        bio: 'I love traveling and exploring new places. Looking for someone to share adventures with!',
-        photos: [
-          'https://via.placeholder.com/400',
-          'https://via.placeholder.com/400',
-          'https://via.placeholder.com/400',
-        ],
-        email: 'john.doe@example.com',
-      });
-      setLoading(false);
-    }, 500);
+    const fetchUserProfile = async () => {
+      try {
+        setLoading(true);
+        
+        // Get current authenticated user
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        
+        if (sessionError) {
+          console.error('Session error:', sessionError);
+          Alert.alert('Error', 'Failed to get user session');
+          setLoading(false);
+          return;
+        }
+        
+        if (!session?.user) {
+          console.log('No authenticated user found');
+          Alert.alert('Error', 'Please log in to view your profile');
+          setLoading(false);
+          return;
+        }
+        
+        const userId = session.user.id;
+        console.log('📋 Fetching profile for user:', userId);
+        
+        // Fetch user profile from Supabase
+        const { data: profileData, error: profileError } = await getUserProfile(userId);
+        
+        if (profileError) {
+          console.error('Profile fetch error:', profileError);
+          Alert.alert('Error', 'Failed to load profile data');
+          setLoading(false);
+          return;
+        }
+        
+        if (profileData) {
+          console.log('✅ Profile loaded successfully');
+          console.log('📸 Photos:', profileData.photos);
+          
+          // Filter out placeholder photos
+          if (profileData.photos && profileData.photos.length > 0) {
+            const validPhotos = profileData.photos.filter((photo: string) => 
+              photo && 
+              !photo.includes('placeholder') && 
+              (photo.startsWith('http') || photo.startsWith('https'))
+            );
+            
+            if (validPhotos.length > 0) {
+              console.log(`✅ Found ${validPhotos.length} valid photos`);
+              profileData.photos = validPhotos;
+            } else {
+              console.log('⚠️  No valid photos found (all placeholders)');
+              profileData.photos = [];
+            }
+          }
+          
+          setUserProfile(profileData);
+        } else {
+          console.log('⚠️  No profile data found for this user');
+          Alert.alert('No Profile', 'No profile data found. Please complete onboarding.');
+        }
+        
+        setLoading(false);
+      } catch (error: any) {
+        console.error('Error fetching profile:', error);
+        Alert.alert('Error', error.message || 'Failed to load profile');
+        setLoading(false);
+      }
+    };
+    
+    fetchUserProfile();
   }, []);
 
   if (loading) {
@@ -256,21 +467,27 @@ export default function ProfileScreen() {
       <View style={[styles.topHeader, Platform.OS === 'android' && { paddingTop: 10 }]}>
         {activeTab === 'edit' ? (
           <>
-            <TouchableOpacity onPress={handleCancel}>
-              <Text style={styles.headerButtonText}>Cancel</Text>
+            <TouchableOpacity onPress={handleCancel} disabled={saving}>
+              <Text style={[styles.headerButtonText, saving && styles.headerButtonDisabled]}>
+                Cancel
+              </Text>
             </TouchableOpacity>
             <View style={{ flex: 1 }} />
-            <TouchableOpacity onPress={handleSave}>
-              <Text style={styles.headerButtonText}>Done</Text>
+            <TouchableOpacity onPress={handleSave} disabled={saving}>
+              <Text style={[styles.headerButtonText, saving && styles.headerButtonDisabled]}>
+                {saving ? 'Saving...' : 'Done'}
+              </Text>
             </TouchableOpacity>
           </>
         ) : (
           <>
             <View style={{ width: 60 }} />
             <Text style={styles.headerName}>
-              {userProfile?.firstName || userProfile?.name || 'Profile'}
+              {userProfile?.first_name || 'Profile'}
             </Text>
-            <View style={{ width: 60 }} />
+            <TouchableOpacity onPress={handleLogout} style={styles.logoutButton}>
+              <Ionicons name="log-out-outline" size={24} color={theme.error} />
+            </TouchableOpacity>
           </>
         )}
       </View>
@@ -309,7 +526,7 @@ export default function ProfileScreen() {
         keyboardShouldPersistTaps="handled"
       >
         {/* Photos Section - Dating App Style */}
-        {((activeTab === 'view' ? userProfile.photos : editingProfile?.photos) || []).length > 0 && (
+        {((activeTab === 'view' ? userProfile.photos : editingProfile?.photos) || []).length > 0 ? (
           <View style={styles.photosSection}>
             <ScrollView
               horizontal
@@ -321,8 +538,50 @@ export default function ProfileScreen() {
             >
               {(activeTab === 'view' ? userProfile.photos : editingProfile?.photos)!.map((photo, index) => (
                 <View key={index} style={styles.photoContainer}>
-                  <Image source={{ uri: photo }} style={styles.photo} contentFit="cover" />
-                  {activeTab === 'edit' && (
+                  {imageErrors[index] ? (
+                    /* Error State - Instagram Style */
+                    <View style={styles.imageErrorContainer}>
+                      <Ionicons name="image-outline" size={60} color={theme.gray} />
+                      <Text style={styles.imageErrorText}>Failed to load</Text>
+                      {activeTab === 'edit' && (
+                        <TouchableOpacity
+                          style={styles.retryButton}
+                          onPress={() => {
+                            setImageErrors(prev => ({ ...prev, [index]: false }));
+                            handlePickImage(index);
+                          }}
+                        >
+                          <Text style={styles.retryButtonText}>Retry</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  ) : (
+                    <>
+                      <Image 
+                        source={{ uri: photo }} 
+                        style={styles.photo} 
+                        contentFit="cover"
+                        onLoadStart={() => {
+                          setImageLoadingStates(prev => ({ ...prev, [index]: true }));
+                        }}
+                        onLoadEnd={() => {
+                          setImageLoadingStates(prev => ({ ...prev, [index]: false }));
+                        }}
+                        onError={() => {
+                          console.error('❌ Failed to load image:', photo);
+                          setImageLoadingStates(prev => ({ ...prev, [index]: false }));
+                          setImageErrors(prev => ({ ...prev, [index]: true }));
+                        }}
+                      />
+                      {imageLoadingStates[index] && (
+                        /* Loading State - Instagram Style */
+                        <View style={styles.imageLoadingOverlay}>
+                          <View style={styles.loadingSpinner} />
+                        </View>
+                      )}
+                    </>
+                  )}
+                  {activeTab === 'edit' && !imageErrors[index] && (
                     <>
                       <TouchableOpacity
                         style={styles.editPhotoButton}
@@ -338,7 +597,7 @@ export default function ProfileScreen() {
                       </TouchableOpacity>
                     </>
                   )}
-                  {(activeTab === 'view' ? userProfile.photos : editingProfile?.photos)!.length > 1 && (
+                  {(activeTab === 'view' ? userProfile.photos : editingProfile?.photos)!.length > 1 && !imageErrors[index] && (
                     <View style={styles.photoIndicator}>
                       <Text style={styles.photoIndicatorText}>
                         {index + 1} / {(activeTab === 'view' ? userProfile.photos : editingProfile?.photos)!.length}
@@ -358,6 +617,32 @@ export default function ProfileScreen() {
               )}
             </ScrollView>
           </View>
+        ) : (
+          /* No Photos Placeholder - Instagram/Facebook Style */
+          activeTab === 'edit' ? (
+            <View style={styles.photosSection}>
+              <View style={styles.noPhotosContainer}>
+                <Ionicons name="camera-outline" size={60} color={theme.gray} />
+                <Text style={styles.noPhotosTitle}>Add Photos</Text>
+                <Text style={styles.noPhotosText}>Add at least 3 photos to your profile</Text>
+                <TouchableOpacity
+                  style={styles.addFirstPhotoButton}
+                  onPress={() => handlePickImage()}
+                >
+                  <Ionicons name="add" size={24} color={theme.white} />
+                  <Text style={styles.addFirstPhotoText}>Add Your First Photo</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : (
+            <View style={styles.photosSection}>
+              <View style={styles.noPhotosContainer}>
+                <Ionicons name="image-outline" size={60} color={theme.gray} />
+                <Text style={styles.noPhotosTitle}>No Photos</Text>
+                <Text style={styles.noPhotosText}>Add photos to your profile in Edit mode</Text>
+              </View>
+            </View>
+          )
         )}
 
         {/* Basic Info Card */}
@@ -372,9 +657,9 @@ export default function ProfileScreen() {
           </View>
           <View style={styles.nameSection}>
             <Text style={styles.name}>
-              {userProfile.firstName && userProfile.lastName
-                ? `${userProfile.firstName} ${userProfile.lastName}`
-                : userProfile.name || 'User'}
+              {userProfile.first_name && userProfile.last_name
+                ? `${userProfile.first_name} ${userProfile.last_name}`
+                : 'User'}
             </Text>
             {userProfile.age && (
               <Text style={styles.age}>{userProfile.age} years old</Text>
@@ -413,16 +698,16 @@ export default function ProfileScreen() {
               </TouchableOpacity>
             )}
           </View>
-          {userProfile.interestedIn && (
+          {userProfile.interested_in && (
             <View style={styles.infoItem}>
               <Text style={styles.infoLabel}>Interested in</Text>
-              <Text style={styles.infoValue}>{userProfile.interestedIn}</Text>
+              <Text style={styles.infoValue}>{userProfile.interested_in}</Text>
             </View>
           )}
-          {userProfile.lookingFor && (
+          {userProfile.looking_for && (
             <View style={styles.infoItem}>
               <Text style={styles.infoLabel}>Looking for</Text>
-              <Text style={styles.infoValue}>{userProfile.lookingFor}</Text>
+              <Text style={styles.infoValue}>{userProfile.looking_for}</Text>
             </View>
           )}
         </View>
@@ -443,16 +728,16 @@ export default function ProfileScreen() {
               <Text style={styles.infoValue}>{userProfile.profession}</Text>
             </View>
           )}
-          {userProfile.educationLevel && (
+          {userProfile.education_level && (
             <View style={styles.infoItem}>
               <Text style={styles.infoLabel}>🎓 Education</Text>
-              <Text style={styles.infoValue}>{userProfile.educationLevel}</Text>
+              <Text style={styles.infoValue}>{userProfile.education_level}</Text>
             </View>
           )}
         </View>
 
         {/* Personal Details Card */}
-        {(userProfile.nationality || userProfile.growUp || userProfile.smoke || userProfile.hasChildren) && (
+        {(userProfile.nationality || userProfile.grow_up || userProfile.smoke || userProfile.has_children) && (
           <View style={styles.card}>
             <View style={styles.cardHeader}>
               <Text style={styles.cardTitle}>Personal Details</Text>
@@ -468,10 +753,10 @@ export default function ProfileScreen() {
                 <Text style={styles.infoValue}>{userProfile.nationality.join(', ')}</Text>
               </View>
             )}
-            {userProfile.growUp && (
+            {userProfile.grow_up && (
               <View style={styles.infoItem}>
                 <Text style={styles.infoLabel}>🏠 Grew up in</Text>
-                <Text style={styles.infoValue}>{userProfile.growUp}</Text>
+                <Text style={styles.infoValue}>{userProfile.grow_up}</Text>
               </View>
             )}
             {userProfile.smoke && (
@@ -480,10 +765,10 @@ export default function ProfileScreen() {
                 <Text style={styles.infoValue}>{userProfile.smoke}</Text>
               </View>
             )}
-            {userProfile.hasChildren && (
+            {userProfile.has_children && (
               <View style={styles.infoItem}>
                 <Text style={styles.infoLabel}>👶 Has children</Text>
-                <Text style={styles.infoValue}>{userProfile.hasChildren}</Text>
+                <Text style={styles.infoValue}>{userProfile.has_children}</Text>
               </View>
             )}
           </View>
@@ -504,7 +789,7 @@ export default function ProfileScreen() {
         )}
 
         {/* Marriage Intentions Card */}
-        {(userProfile.marriageKnow || userProfile.marriageWithin) && (
+        {(userProfile.marriage_know_time || userProfile.marriage_married_time) && (
           <View style={styles.card}>
             <View style={styles.cardHeader}>
               <Text style={styles.cardTitle}>Marriage Intentions</Text>
@@ -514,16 +799,16 @@ export default function ProfileScreen() {
                 </TouchableOpacity>
               )}
             </View>
-            {userProfile.marriageKnow && (
+            {userProfile.marriage_know_time && (
               <View style={styles.infoItem}>
                 <Text style={styles.infoLabel}>Know someone for</Text>
-                <Text style={styles.infoValue}>{userProfile.marriageKnow}</Text>
+                <Text style={styles.infoValue}>{userProfile.marriage_know_time}</Text>
               </View>
             )}
-            {userProfile.marriageWithin && (
+            {userProfile.marriage_married_time && (
               <View style={styles.infoItem}>
                 <Text style={styles.infoLabel}>Married within</Text>
-                <Text style={styles.infoValue}>{userProfile.marriageWithin}</Text>
+                <Text style={styles.infoValue}>{userProfile.marriage_married_time}</Text>
               </View>
             )}
           </View>
@@ -580,10 +865,18 @@ const styles = StyleSheet.create({
     color: theme.buttonActive,
     fontWeight: '400',
   },
+  headerButtonDisabled: {
+    opacity: 0.5,
+  },
   headerName: {
     fontSize: 17,
     fontWeight: '600',
     color: theme.black,
+  },
+  logoutButton: {
+    width: 60,
+    alignItems: 'flex-end',
+    paddingRight: 16,
   },
   separator: {
     height: 1,
@@ -813,6 +1106,43 @@ const styles = StyleSheet.create({
     color: theme.gray,
     fontWeight: '500',
   },
+  noPhotosContainer: {
+    width: width * 0.9,
+    height: width * 1.2,
+    marginHorizontal: 20,
+    borderRadius: 20,
+    backgroundColor: theme.lightGray,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 40,
+  },
+  noPhotosTitle: {
+    fontSize: 24,
+    fontWeight: '600',
+    color: theme.black,
+    marginTop: 20,
+    marginBottom: 8,
+  },
+  noPhotosText: {
+    fontSize: 16,
+    color: theme.gray,
+    textAlign: 'center',
+    marginBottom: 24,
+  },
+  addFirstPhotoButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: theme.buttonActive,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 30,
+    gap: 8,
+  },
+  addFirstPhotoText: {
+    color: theme.white,
+    fontSize: 16,
+    fontWeight: '600',
+  },
   editInput: {
     fontSize: 16,
     color: theme.black,
@@ -843,5 +1173,47 @@ const styles = StyleSheet.create({
     padding: 12,
     minHeight: 100,
     maxHeight: 200,
+  },
+  imageLoadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(255, 255, 255, 0.8)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 20,
+  },
+  loadingSpinner: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 3,
+    borderColor: theme.lightGray,
+    borderTopColor: theme.buttonActive,
+  },
+  imageErrorContainer: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: theme.lightGray,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 20,
+    padding: 20,
+  },
+  imageErrorText: {
+    fontSize: 16,
+    color: theme.gray,
+    marginTop: 12,
+    fontWeight: '500',
+  },
+  retryButton: {
+    marginTop: 16,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    backgroundColor: theme.buttonActive,
+    borderRadius: 20,
+  },
+  retryButtonText: {
+    color: theme.white,
+    fontSize: 14,
+    fontWeight: '600',
   },
 });

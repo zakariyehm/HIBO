@@ -4,11 +4,11 @@
  */
 
 import { Toast } from '@/components/Toast';
-import { Colors } from '@/constants/theme';
+import { getUserProfile, signInWithEmail } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import { router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useFocusEffect } from '@react-navigation/native';
 import React, { useState } from 'react';
 import {
   BackHandler,
@@ -96,27 +96,68 @@ export default function LoginScreen() {
 
     setIsLoading(true);
 
-    // Simulate API call - replace with actual backend call
-    setTimeout(() => {
-      setIsLoading(false);
+    try {
+      console.log('🔐 Attempting login for:', email.trim());
       
-      // Simulate different error scenarios for demonstration
-      // In real app, this would come from API response
-      const emailLower = email.toLowerCase().trim();
-      
-      if (emailLower === 'error@example.com') {
-        showNotification('No account found with this email. Please check your email or sign up.', 'error');
-      } else if (emailLower === 'wrong@example.com') {
-        showNotification('Incorrect password. Please try again or reset your password.', 'error');
-      } else {
-        showNotification('Signed in successfully! Welcome back.', 'success');
+      // Sign in with Supabase
+      const { data, error } = await signInWithEmail(email.trim(), password);
+
+      if (error) {
+        console.error('❌ Sign in error:', error);
         
-        // Navigate to home after successful login
-        setTimeout(() => {
-          router.replace('/(tabs)');
-        }, 1000);
+        // Handle specific error messages
+        if (error.message.includes('Invalid login credentials')) {
+          showNotification('Incorrect email or password. Please try again.', 'error');
+        } else if (error.message.includes('Email not confirmed')) {
+          showNotification('Please verify your email address before signing in.', 'error');
+        } else {
+          showNotification(error.message || 'Failed to sign in. Please try again.', 'error');
+        }
+        
+        setIsLoading(false);
+        return;
       }
-    }, 1500);
+
+      if (!data.user) {
+        console.error('❌ No user data returned');
+        showNotification('Failed to sign in. Please try again.', 'error');
+        setIsLoading(false);
+        return;
+      }
+
+      console.log('✅ User authenticated:', data.user.id);
+
+      // Check if user has a profile
+      console.log('📋 Checking for user profile...');
+      const { data: profileData, error: profileError } = await getUserProfile(data.user.id);
+
+      if (profileError || !profileData) {
+        // User signed in but profile doesn't exist - redirect to onboarding
+        console.warn('⚠️  Profile not found, redirecting to onboarding');
+        showNotification('Please complete your profile setup.', 'info');
+        setTimeout(() => {
+          router.replace('/onboarding');
+        }, 1000);
+        setIsLoading(false);
+        return;
+      }
+
+      // Success!
+      console.log('✅ Profile found! Logging in...');
+      console.log('👤 Welcome:', profileData.first_name, profileData.last_name);
+      showNotification(`Welcome back, ${profileData.first_name}!`, 'success');
+      
+      // Navigate to home after successful login
+      setTimeout(() => {
+        console.log('🚀 Navigating to home screen...');
+        router.replace('/(tabs)');
+      }, 1000);
+      
+    } catch (error: any) {
+      console.error('Unexpected error during sign in:', error);
+      showNotification('An unexpected error occurred. Please try again.', 'error');
+      setIsLoading(false);
+    }
   };
 
   const handleGoogleSignIn = async () => {
