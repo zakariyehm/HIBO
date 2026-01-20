@@ -3,36 +3,50 @@
  * Handles authentication and database operations
  */
 
-import 'react-native-url-polyfill/auto';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient } from '@supabase/supabase-js';
-import { Platform } from 'react-native';
+import 'react-native-url-polyfill/auto';
 
 // Supabase configuration
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
 
-// Simple in-memory storage for Expo Go (sessions won't persist between app restarts)
-// For production, use a development build with proper AsyncStorage
-const memoryStorage: { [key: string]: string } = {};
-
-const ExpoGoStorageAdapter = {
+// Custom storage adapter for React Native with AsyncStorage
+const ExpoStorageAdapter = {
   getItem: async (key: string) => {
-    return memoryStorage[key] || null;
+    try {
+      const value = await AsyncStorage.getItem(key);
+      console.log('📦 Getting from storage:', key, value ? '✅ Found' : '❌ Not found');
+      return value;
+    } catch (error) {
+      console.error('❌ Error getting from storage:', error);
+      return null;
+    }
   },
   setItem: async (key: string, value: string) => {
-    memoryStorage[key] = value;
+    try {
+      await AsyncStorage.setItem(key, value);
+      console.log('💾 Saved to storage:', key);
+    } catch (error) {
+      console.error('❌ Error saving to storage:', error);
+    }
   },
   removeItem: async (key: string) => {
-    delete memoryStorage[key];
+    try {
+      await AsyncStorage.removeItem(key);
+      console.log('🗑️  Removed from storage:', key);
+    } catch (error) {
+      console.error('❌ Error removing from storage:', error);
+    }
   },
 };
 
-// Create Supabase client
+// Create Supabase client with persistent session
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: {
-    storage: ExpoGoStorageAdapter as any,
+    storage: ExpoStorageAdapter as any,
     autoRefreshToken: true,
-    persistSession: false, // Disabled for Expo Go
+    persistSession: true, // ✅ ENABLED for session persistence
     detectSessionInUrl: false,
   },
 });
@@ -119,8 +133,26 @@ export const signOut = async () => {
 };
 
 export const getCurrentUser = async () => {
-  const { data: { user }, error } = await supabase.auth.getUser();
-  return { user, error };
+  try {
+    // First check if we have a session
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    
+    if (sessionError) {
+      console.error('❌ Session error:', sessionError);
+      return { user: null, error: sessionError };
+    }
+    
+    if (!session) {
+      console.log('📭 No session found in storage');
+      return { user: null, error: null };
+    }
+    
+    console.log('✅ Session found:', session.user.id);
+    return { user: session.user, error: null };
+  } catch (error: any) {
+    console.error('❌ Get current user error:', error);
+    return { user: null, error };
+  }
 };
 
 // Database functions

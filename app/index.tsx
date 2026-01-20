@@ -1,14 +1,20 @@
 import { getCurrentUser, getUserProfile } from '@/lib/supabase';
 import { Redirect } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 
 export default function Index() {
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   useEffect(() => {
-    checkAuthStatus();
+    // Add slight delay for smooth splash experience
+    const timer = setTimeout(() => {
+      checkAuthStatus();
+    }, 500);
+    
+    return () => clearTimeout(timer);
   }, []);
 
   const checkAuthStatus = async () => {
@@ -48,8 +54,21 @@ export default function Index() {
 
   if (isCheckingAuth) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#FFFBF8' }}>
-        <ActivityIndicator size="large" color="#000000" />
+      <View style={styles.splashContainer}>
+        <StatusBar style="dark" />
+        
+        {/* HIBO Logo/Brand */}
+        <View style={styles.logoContainer}>
+          <View style={styles.logoCircle}>
+            <Text style={styles.logoText}>HIBO</Text>
+          </View>
+        </View>
+        
+        {/* Loading Indicator */}
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#FFFFFF" />
+          <Text style={styles.loadingText}>Loading...</Text>
+        </View>
       </View>
     );
   }
@@ -61,4 +80,44 @@ export default function Index() {
 
   return <Redirect href="/welcome" />;
 }
+
+const styles = StyleSheet.create({
+  splashContainer: {
+    flex: 1,
+    backgroundColor: '#CDAEF9',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  logoContainer: {
+    marginBottom: 60,
+  },
+  logoCircle: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: '#9AED8E',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  logoText: {
+    fontSize: 36,
+    fontWeight: '700',
+    color: '#1C1C1E',
+    letterSpacing: 2,
+  },
+  loadingContainer: {
+    alignItems: 'center',
+    gap: 12,
+  },
+  loadingText: {
+    fontSize: 16,
+    color: '#FFFFFF',
+    fontWeight: '500',
+  },
+});
 
