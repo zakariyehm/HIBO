@@ -37,6 +37,7 @@ export function PostCard({
   onComment,
 }: PostCardProps) {
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const [showMenu, setShowMenu] = useState(false);
   
   // Use photos array if provided, otherwise fallback to postImage
   const imageArray = photos && photos.length > 0 ? photos : (postImage ? [postImage] : []);
@@ -71,11 +72,58 @@ export function PostCard({
             </View>
           </View>
           <View style={styles.headerActions}>
-            <TouchableOpacity style={styles.moreButton}>
+            <TouchableOpacity 
+              style={styles.moreButton}
+              onPress={() => setShowMenu(!showMenu)}
+            >
               <Ionicons name="ellipsis-vertical" size={20} color={Colors.textDark} />
             </TouchableOpacity>
           </View>
         </View>
+
+        {/* More Menu Dropdown */}
+        {showMenu && (
+          <>
+            {/* Backdrop overlay - closes menu when touched */}
+            <TouchableOpacity 
+              style={styles.menuBackdrop}
+              activeOpacity={1}
+              onPress={() => setShowMenu(false)}
+            />
+            <View style={styles.menuContainer}>
+              <TouchableOpacity 
+                style={styles.menuItem}
+                onPress={() => {
+                  setShowMenu(false);
+                  // Add view profile action here
+                }}
+              >
+                <Ionicons name="person-outline" size={16} color={Colors.textDark} />
+                <Text style={styles.menuItemText}>View Profile</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={styles.menuItem}
+                onPress={() => {
+                  setShowMenu(false);
+                  // Add report action here
+                }}
+              >
+                <Ionicons name="flag-outline" size={16} color={Colors.textDark} />
+                <Text style={styles.menuItemText}>Report</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={styles.menuItem}
+                onPress={() => {
+                  setShowMenu(false);
+                  // Add block action here
+                }}
+              >
+                <Ionicons name="ban-outline" size={16} color={Colors.red} />
+                <Text style={[styles.menuItemText, styles.menuItemTextDanger]}>Block</Text>
+              </TouchableOpacity>
+            </View>
+          </>
+        )}
 
         {/* Post Images - Swiper */}
         {imageArray.length > 0 && (
@@ -237,6 +285,48 @@ const styles = StyleSheet.create({
   },
   moreButton: {
     padding: 4,
+  },
+  menuBackdrop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'transparent',
+    zIndex: 999,
+  },
+  menuContainer: {
+    position: 'absolute',
+    top: 50,
+    right: 16,
+    backgroundColor: Colors.cardBackground,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 5,
+    minWidth: 150,
+    zIndex: 1000,
+  },
+  menuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    gap: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.borderLight,
+  },
+  menuItemText: {
+    fontSize: 12,
+    color: Colors.textDark,
+    fontWeight: '500',
+  },
+  menuItemTextDanger: {
+    color: Colors.red,
   },
   imageContainer: {
     marginBottom: 12,
