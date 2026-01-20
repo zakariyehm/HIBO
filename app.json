@@ -8,6 +8,10 @@
     "scheme": "hibo",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
+    "statusBar": {
+      "style": "dark",
+      "backgroundColor": "#FFFBF8"
+    },
     "ios": {
       "supportsTablet": true
     },
@@ -18,7 +22,11 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "package": "com.zacharyhassan.hibo"
+      "package": "com.zacharyhassan.hibo",
+      "navigationBar": {
+        "backgroundColor": "#FFFBF8",
+        "barStyle": "dark-content"
+      }
     },
     "web": {
       "output": "static",

@@ -3,6 +3,7 @@
  * Display user profile information with dating app design
  */
 
+import { Toast } from '@/components/Toast';
 import { Colors } from '@/constants/theme';
 import { getUserProfile, signOut, supabase, uploadPhotos } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
@@ -12,12 +13,14 @@ import { router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
   Dimensions,
   Platform,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View
 } from 'react-native';
@@ -87,13 +90,23 @@ export default function ProfileScreen() {
   const [newPhotos, setNewPhotos] = useState<string[]>([]); // Track newly added/changed photos
   const [imageLoadingStates, setImageLoadingStates] = useState<Record<number, boolean>>({});
   const [imageErrors, setImageErrors] = useState<Record<number, boolean>>({});
+  const [toastVisible, setToastVisible] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
+  const [toastType, setToastType] = useState<'info' | 'error' | 'success'>('info');
+
+  // Show toast notification
+  const showToast = (message: string, type: 'info' | 'error' | 'success' = 'info') => {
+    setToastMessage(message);
+    setToastType(type);
+    setToastVisible(true);
+  };
 
   // Request image permissions
   const requestImagePermissions = async () => {
     if (Platform.OS !== 'web') {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission needed', 'We need access to your photos to upload images.');
+        showToast('We need access to your photos to upload images.', 'error');
         return false;
       }
     }
@@ -116,7 +129,7 @@ export default function ProfileScreen() {
         ]
       );
     } catch (error) {
-      Alert.alert('Error', 'Failed to pick image');
+      showToast('Failed to pick image', 'error');
     }
   };
 
@@ -147,7 +160,7 @@ export default function ProfileScreen() {
         }
       }
     } catch (error) {
-      Alert.alert('Error', 'Failed to pick image from gallery');
+      showToast('Failed to pick image from gallery', 'error');
     }
   };
 
@@ -155,7 +168,7 @@ export default function ProfileScreen() {
     try {
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission needed', 'We need access to your camera.');
+        showToast('We need access to your camera.', 'error');
         return;
       }
 
@@ -183,7 +196,7 @@ export default function ProfileScreen() {
         }
       }
     } catch (error) {
-      Alert.alert('Error', 'Failed to take photo');
+      showToast('Failed to take photo', 'error');
     }
   };
 
@@ -191,7 +204,7 @@ export default function ProfileScreen() {
     if (editingProfile && editingProfile.photos) {
       // Don't allow removal if it would result in less than 3 photos
       if (editingProfile.photos.length <= 3) {
-        Alert.alert('Minimum Photos', 'You need at least 3 photos in your profile.');
+        showToast('You need at least 3 photos in your profile.', 'error');
         return;
       }
       
@@ -202,7 +215,7 @@ export default function ProfileScreen() {
 
   const handleSave = async () => {
     if (!editingProfile || !userProfile?.id) {
-      Alert.alert('Error', 'No profile data to save');
+      showToast('No profile data to save', 'error');
       return;
     }
     
@@ -235,7 +248,7 @@ export default function ProfileScreen() {
         
         if (uploadError) {
           console.error('❌ Photo upload error:', uploadError);
-          Alert.alert('Upload Error', 'Failed to upload photos. Please check your connection and try again.');
+          showToast('Failed to upload photos. Please try again.', 'error');
           setSaving(false);
           return;
         }
@@ -264,7 +277,7 @@ export default function ProfileScreen() {
       // Validate minimum 3 photos before saving
       if (finalPhotoUrls.length < 3) {
         console.error('❌ Need at least 3 photos, have:', finalPhotoUrls.length);
-        Alert.alert('Minimum Photos Required', 'You need at least 3 photos in your profile.');
+        showToast('You need at least 3 photos in your profile.', 'error');
         setSaving(false);
         return;
       }
@@ -272,18 +285,37 @@ export default function ProfileScreen() {
       console.log('📤 Saving profile with', finalPhotoUrls.length, 'photos');
       console.log('📸 Final photo URLs:', finalPhotoUrls);
       
+      // Prepare all updated fields
+      const updatedFields: any = {
+        photos: finalPhotoUrls,
+        first_name: editingProfile.first_name,
+        last_name: editingProfile.last_name,
+        age: editingProfile.age,
+        location: editingProfile.location,
+        height: editingProfile.height,
+        gender: editingProfile.gender,
+        interested_in: editingProfile.interested_in,
+        looking_for: editingProfile.looking_for,
+        profession: editingProfile.profession,
+        education_level: editingProfile.education_level,
+        grow_up: editingProfile.grow_up,
+        smoke: editingProfile.smoke,
+        has_children: editingProfile.has_children,
+        bio: editingProfile.bio,
+        updated_at: new Date().toISOString(),
+      };
+      
+      console.log('💾 Updating all profile fields...');
+      
       // Update profile in Supabase
       const { error: updateError } = await supabase
         .from('profiles')
-        .update({
-          photos: finalPhotoUrls,
-          updated_at: new Date().toISOString(),
-        })
+        .update(updatedFields)
         .eq('id', userProfile.id);
       
       if (updateError) {
         console.error('❌ Profile update error:', updateError);
-        Alert.alert('Database Error', 'Failed to save profile. Please try again.');
+        showToast('Failed to save profile. Please try again.', 'error');
         setSaving(false);
         return;
       }
@@ -298,10 +330,11 @@ export default function ProfileScreen() {
       setActiveTab('view');
       setSaving(false);
       
-      Alert.alert('Success! 🎉', 'Your profile has been updated successfully!');
+      // Show success toast
+      showToast('Profile updated successfully! 🎉', 'success');
     } catch (error: any) {
       console.error('❌ Save error:', error);
-      Alert.alert('Error', error.message || 'An unexpected error occurred. Please try again.');
+      showToast(error.message || 'An unexpected error occurred.', 'error');
       setSaving(false);
     }
   };
@@ -338,7 +371,7 @@ export default function ProfileScreen() {
               
               if (error) {
                 console.error('❌ Logout error:', error);
-                Alert.alert('Error', 'Failed to logout. Please try again.');
+                showToast('Failed to logout. Please try again.', 'error');
                 return;
               }
               
@@ -347,7 +380,7 @@ export default function ProfileScreen() {
               router.replace('/welcome');
             } catch (error: any) {
               console.error('❌ Logout error:', error);
-              Alert.alert('Error', 'Failed to logout. Please try again.');
+              showToast('Failed to logout. Please try again.', 'error');
             }
           },
         },
@@ -367,14 +400,14 @@ export default function ProfileScreen() {
         
         if (sessionError) {
           console.error('Session error:', sessionError);
-          Alert.alert('Error', 'Failed to get user session');
+          showToast('Failed to get user session', 'error');
           setLoading(false);
           return;
         }
         
         if (!session?.user) {
           console.log('No authenticated user found');
-          Alert.alert('Error', 'Please log in to view your profile');
+          showToast('Please log in to view your profile', 'error');
           setLoading(false);
           return;
         }
@@ -387,7 +420,7 @@ export default function ProfileScreen() {
         
         if (profileError) {
           console.error('Profile fetch error:', profileError);
-          Alert.alert('Error', 'Failed to load profile data');
+          showToast('Failed to load profile data', 'error');
           setLoading(false);
           return;
         }
@@ -416,13 +449,13 @@ export default function ProfileScreen() {
           setUserProfile(profileData);
         } else {
           console.log('⚠️  No profile data found for this user');
-          Alert.alert('No Profile', 'No profile data found. Please complete onboarding.');
+          showToast('No profile data found. Please complete onboarding.', 'error');
         }
         
         setLoading(false);
       } catch (error: any) {
         console.error('Error fetching profile:', error);
-        Alert.alert('Error', error.message || 'Failed to load profile');
+        showToast(error.message || 'Failed to load profile', 'error');
         setLoading(false);
       }
     };
@@ -439,6 +472,7 @@ export default function ProfileScreen() {
           <Text style={styles.headerButtonText}>Done</Text>
         </View>
         <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={theme.black} />
           <Text style={styles.loadingText}>Loading profile...</Text>
         </View>
       </View>
@@ -473,7 +507,14 @@ export default function ProfileScreen() {
               </Text>
             </TouchableOpacity>
             <View style={{ flex: 1 }} />
-            <TouchableOpacity onPress={handleSave} disabled={saving}>
+            <TouchableOpacity onPress={handleSave} disabled={saving} style={styles.doneButtonContainer}>
+              {saving && (
+                <ActivityIndicator 
+                  size="small" 
+                  color={theme.gray} 
+                  style={styles.saveSpinner}
+                />
+              )}
               <Text style={[styles.headerButtonText, saving && styles.headerButtonDisabled]}>
                 {saving ? 'Saving...' : 'Done'}
               </Text>
@@ -649,42 +690,114 @@ export default function ProfileScreen() {
         <View style={styles.card}>
           <View style={styles.cardHeader}>
             <Text style={styles.cardTitle}>Basic Information</Text>
-            {activeTab === 'edit' && (
-              <TouchableOpacity>
-                <Text style={styles.editLabel}>edit</Text>
-              </TouchableOpacity>
-            )}
           </View>
-          <View style={styles.nameSection}>
-            <Text style={styles.name}>
-              {userProfile.first_name && userProfile.last_name
-                ? `${userProfile.first_name} ${userProfile.last_name}`
-                : 'User'}
-            </Text>
-            {userProfile.age && (
-              <Text style={styles.age}>{userProfile.age} years old</Text>
-            )}
-          </View>
+          
+          {activeTab === 'edit' ? (
+            /* Edit Mode */
+            <>
+              <View style={styles.nameSection}>
+                <View style={styles.editRow}>
+                  <Text style={styles.infoLabel}>First Name</Text>
+                  <TextInput
+                    style={styles.editInputValue}
+                    value={editingProfile?.first_name || ''}
+                    onChangeText={(text) => setEditingProfile({ ...editingProfile, first_name: text })}
+                    placeholder="First name"
+                    placeholderTextColor={theme.placeholder}
+                  />
+                </View>
+                <View style={styles.editRow}>
+                  <Text style={styles.infoLabel}>Last Name</Text>
+                  <TextInput
+                    style={styles.editInputValue}
+                    value={editingProfile?.last_name || ''}
+                    onChangeText={(text) => setEditingProfile({ ...editingProfile, last_name: text })}
+                    placeholder="Last name"
+                    placeholderTextColor={theme.placeholder}
+                  />
+                </View>
+                <View style={styles.editRow}>
+                  <Text style={styles.infoLabel}>Age</Text>
+                  <TextInput
+                    style={styles.editInputValue}
+                    value={editingProfile?.age?.toString() || ''}
+                    onChangeText={(text) => setEditingProfile({ ...editingProfile, age: parseInt(text) || 0 })}
+                    placeholder="Age"
+                    keyboardType="numeric"
+                    placeholderTextColor={theme.placeholder}
+                  />
+                </View>
+              </View>
 
-          {userProfile.location && (
-            <View style={styles.infoItem}>
-              <Text style={styles.infoLabel}>📍 Location</Text>
-              <Text style={styles.infoValue}>{userProfile.location}</Text>
-            </View>
-          )}
+              <View style={styles.editRow}>
+                <Text style={styles.infoLabel}>📍 Location</Text>
+                <TextInput
+                  style={styles.editInputValue}
+                  value={editingProfile?.location || ''}
+                  onChangeText={(text) => setEditingProfile({ ...editingProfile, location: text })}
+                  placeholder="Location"
+                  placeholderTextColor={theme.placeholder}
+                />
+              </View>
 
-          {userProfile.height && (
-            <View style={styles.infoItem}>
-              <Text style={styles.infoLabel}>📏 Height</Text>
-              <Text style={styles.infoValue}>{userProfile.height} cm</Text>
-            </View>
-          )}
+              <View style={styles.editRow}>
+                <Text style={styles.infoLabel}>📏 Height (cm)</Text>
+                <TextInput
+                  style={styles.editInputValue}
+                  value={editingProfile?.height?.toString() || ''}
+                  onChangeText={(text) => setEditingProfile({ ...editingProfile, height: parseInt(text) || 0 })}
+                  placeholder="Height"
+                  keyboardType="numeric"
+                  placeholderTextColor={theme.placeholder}
+                />
+              </View>
 
-          {userProfile.gender && (
-            <View style={styles.infoItem}>
-              <Text style={styles.infoLabel}>👤 Gender</Text>
-              <Text style={styles.infoValue}>{userProfile.gender}</Text>
-            </View>
+              <View style={styles.editRow}>
+                <Text style={styles.infoLabel}>👤 Gender</Text>
+                <TextInput
+                  style={styles.editInputValue}
+                  value={editingProfile?.gender || ''}
+                  onChangeText={(text) => setEditingProfile({ ...editingProfile, gender: text })}
+                  placeholder="Gender"
+                  placeholderTextColor={theme.placeholder}
+                />
+              </View>
+            </>
+          ) : (
+            /* View Mode */
+            <>
+              <View style={styles.nameSection}>
+                <Text style={styles.name}>
+                  {userProfile.first_name && userProfile.last_name
+                    ? `${userProfile.first_name} ${userProfile.last_name}`
+                    : 'User'}
+                </Text>
+                {userProfile.age && (
+                  <Text style={styles.age}>{userProfile.age} years old</Text>
+                )}
+              </View>
+
+              {userProfile.location && (
+                <View style={styles.infoItem}>
+                  <Text style={styles.infoLabel}>📍 Location</Text>
+                  <Text style={styles.infoValue}>{userProfile.location}</Text>
+                </View>
+              )}
+
+              {userProfile.height && (
+                <View style={styles.infoItem}>
+                  <Text style={styles.infoLabel}>📏 Height</Text>
+                  <Text style={styles.infoValue}>{userProfile.height} cm</Text>
+                </View>
+              )}
+
+              {userProfile.gender && (
+                <View style={styles.infoItem}>
+                  <Text style={styles.infoLabel}>👤 Gender</Text>
+                  <Text style={styles.infoValue}>{userProfile.gender}</Text>
+                </View>
+              )}
+            </>
           )}
         </View>
 
@@ -692,23 +805,45 @@ export default function ProfileScreen() {
         <View style={styles.card}>
           <View style={styles.cardHeader}>
             <Text style={styles.cardTitle}>Preferences</Text>
-            {activeTab === 'edit' && (
-              <TouchableOpacity>
-                <Text style={styles.editLabel}>edit</Text>
-              </TouchableOpacity>
-            )}
           </View>
-          {userProfile.interested_in && (
-            <View style={styles.infoItem}>
-              <Text style={styles.infoLabel}>Interested in</Text>
-              <Text style={styles.infoValue}>{userProfile.interested_in}</Text>
-            </View>
-          )}
-          {userProfile.looking_for && (
-            <View style={styles.infoItem}>
-              <Text style={styles.infoLabel}>Looking for</Text>
-              <Text style={styles.infoValue}>{userProfile.looking_for}</Text>
-            </View>
+          {activeTab === 'edit' ? (
+            <>
+              <View style={styles.editRow}>
+                <Text style={styles.infoLabel}>Interested in</Text>
+                <TextInput
+                  style={styles.editInputValue}
+                  value={editingProfile?.interested_in || ''}
+                  onChangeText={(text) => setEditingProfile({ ...editingProfile, interested_in: text })}
+                  placeholder="Interested in"
+                  placeholderTextColor={theme.placeholder}
+                />
+              </View>
+              <View style={styles.editRow}>
+                <Text style={styles.infoLabel}>Looking for</Text>
+                <TextInput
+                  style={styles.editInputValue}
+                  value={editingProfile?.looking_for || ''}
+                  onChangeText={(text) => setEditingProfile({ ...editingProfile, looking_for: text })}
+                  placeholder="Looking for"
+                  placeholderTextColor={theme.placeholder}
+                />
+              </View>
+            </>
+          ) : (
+            <>
+              {userProfile.interested_in && (
+                <View style={styles.infoItem}>
+                  <Text style={styles.infoLabel}>Interested in</Text>
+                  <Text style={styles.infoValue}>{userProfile.interested_in}</Text>
+                </View>
+              )}
+              {userProfile.looking_for && (
+                <View style={styles.infoItem}>
+                  <Text style={styles.infoLabel}>Looking for</Text>
+                  <Text style={styles.infoValue}>{userProfile.looking_for}</Text>
+                </View>
+              )}
+            </>
           )}
         </View>
 
@@ -716,63 +851,115 @@ export default function ProfileScreen() {
         <View style={styles.card}>
           <View style={styles.cardHeader}>
             <Text style={styles.cardTitle}>Professional</Text>
-            {activeTab === 'edit' && (
-              <TouchableOpacity>
-                <Text style={styles.editLabel}>edit</Text>
-              </TouchableOpacity>
-            )}
           </View>
-          {userProfile.profession && (
-            <View style={styles.infoItem}>
-              <Text style={styles.infoLabel}>💼 Profession</Text>
-              <Text style={styles.infoValue}>{userProfile.profession}</Text>
-            </View>
-          )}
-          {userProfile.education_level && (
-            <View style={styles.infoItem}>
-              <Text style={styles.infoLabel}>🎓 Education</Text>
-              <Text style={styles.infoValue}>{userProfile.education_level}</Text>
-            </View>
+          {activeTab === 'edit' ? (
+            <>
+              <View style={styles.editRow}>
+                <Text style={styles.infoLabel}>💼 Profession</Text>
+                <TextInput
+                  style={styles.editInputValue}
+                  value={editingProfile?.profession || ''}
+                  onChangeText={(text) => setEditingProfile({ ...editingProfile, profession: text })}
+                  placeholder="Profession"
+                  placeholderTextColor={theme.placeholder}
+                />
+              </View>
+              <View style={styles.editRow}>
+                <Text style={styles.infoLabel}>🎓 Education</Text>
+                <TextInput
+                  style={styles.editInputValue}
+                  value={editingProfile?.education_level || ''}
+                  onChangeText={(text) => setEditingProfile({ ...editingProfile, education_level: text })}
+                  placeholder="Education level"
+                  placeholderTextColor={theme.placeholder}
+                />
+              </View>
+            </>
+          ) : (
+            <>
+              {userProfile.profession && (
+                <View style={styles.infoItem}>
+                  <Text style={styles.infoLabel}>💼 Profession</Text>
+                  <Text style={styles.infoValue}>{userProfile.profession}</Text>
+                </View>
+              )}
+              {userProfile.education_level && (
+                <View style={styles.infoItem}>
+                  <Text style={styles.infoLabel}>🎓 Education</Text>
+                  <Text style={styles.infoValue}>{userProfile.education_level}</Text>
+                </View>
+              )}
+            </>
           )}
         </View>
 
         {/* Personal Details Card */}
-        {(userProfile.nationality || userProfile.grow_up || userProfile.smoke || userProfile.has_children) && (
-          <View style={styles.card}>
-            <View style={styles.cardHeader}>
-              <Text style={styles.cardTitle}>Personal Details</Text>
-              {activeTab === 'edit' && (
-                <TouchableOpacity>
-                  <Text style={styles.editLabel}>edit</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-            {userProfile.nationality && userProfile.nationality.length > 0 && (
-              <View style={styles.infoItem}>
-                <Text style={styles.infoLabel}>🌍 Nationality</Text>
-                <Text style={styles.infoValue}>{userProfile.nationality.join(', ')}</Text>
-              </View>
-            )}
-            {userProfile.grow_up && (
-              <View style={styles.infoItem}>
-                <Text style={styles.infoLabel}>🏠 Grew up in</Text>
-                <Text style={styles.infoValue}>{userProfile.grow_up}</Text>
-              </View>
-            )}
-            {userProfile.smoke && (
-              <View style={styles.infoItem}>
-                <Text style={styles.infoLabel}>🚭 Smoke</Text>
-                <Text style={styles.infoValue}>{userProfile.smoke}</Text>
-              </View>
-            )}
-            {userProfile.has_children && (
-              <View style={styles.infoItem}>
-                <Text style={styles.infoLabel}>👶 Has children</Text>
-                <Text style={styles.infoValue}>{userProfile.has_children}</Text>
-              </View>
-            )}
+        <View style={styles.card}>
+          <View style={styles.cardHeader}>
+            <Text style={styles.cardTitle}>Personal Details</Text>
           </View>
-        )}
+          {activeTab === 'edit' ? (
+            <>
+              <View style={styles.editRow}>
+                <Text style={styles.infoLabel}>🏠 Grew up in</Text>
+                <TextInput
+                  style={styles.editInputValue}
+                  value={editingProfile?.grow_up || ''}
+                  onChangeText={(text) => setEditingProfile({ ...editingProfile, grow_up: text })}
+                  placeholder="City/Country"
+                  placeholderTextColor={theme.placeholder}
+                />
+              </View>
+              <View style={styles.editRow}>
+                <Text style={styles.infoLabel}>🚭 Smoke</Text>
+                <TextInput
+                  style={styles.editInputValue}
+                  value={editingProfile?.smoke || ''}
+                  onChangeText={(text) => setEditingProfile({ ...editingProfile, smoke: text })}
+                  placeholder="Yes/No"
+                  placeholderTextColor={theme.placeholder}
+                />
+              </View>
+              <View style={styles.editRow}>
+                <Text style={styles.infoLabel}>👶 Has children</Text>
+                <TextInput
+                  style={styles.editInputValue}
+                  value={editingProfile?.has_children || ''}
+                  onChangeText={(text) => setEditingProfile({ ...editingProfile, has_children: text })}
+                  placeholder="Yes/No"
+                  placeholderTextColor={theme.placeholder}
+                />
+              </View>
+            </>
+          ) : (
+            <>
+              {userProfile.nationality && userProfile.nationality.length > 0 && (
+                <View style={styles.infoItem}>
+                  <Text style={styles.infoLabel}>🌍 Nationality</Text>
+                  <Text style={styles.infoValue}>{userProfile.nationality.join(', ')}</Text>
+                </View>
+              )}
+              {userProfile.grow_up && (
+                <View style={styles.infoItem}>
+                  <Text style={styles.infoLabel}>🏠 Grew up in</Text>
+                  <Text style={styles.infoValue}>{userProfile.grow_up}</Text>
+                </View>
+              )}
+              {userProfile.smoke && (
+                <View style={styles.infoItem}>
+                  <Text style={styles.infoLabel}>🚭 Smoke</Text>
+                  <Text style={styles.infoValue}>{userProfile.smoke}</Text>
+                </View>
+              )}
+              {userProfile.has_children && (
+                <View style={styles.infoItem}>
+                  <Text style={styles.infoLabel}>👶 Has children</Text>
+                  <Text style={styles.infoValue}>{userProfile.has_children}</Text>
+                </View>
+              )}
+            </>
+          )}
+        </View>
 
         {/* Personality Card */}
         {userProfile.personality && userProfile.personality.length > 0 && (
@@ -829,21 +1016,36 @@ export default function ProfileScreen() {
         )}
 
         {/* Bio Card */}
-        {userProfile.bio && (
-          <View style={styles.card}>
-            <View style={styles.cardHeader}>
-              <Text style={styles.cardTitle}>About</Text>
-              {activeTab === 'edit' && (
-                <TouchableOpacity>
-                  <Text style={styles.editLabel}>edit</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-            <Text style={styles.bioText}>{userProfile.bio}</Text>
+        <View style={styles.card}>
+          <View style={styles.cardHeader}>
+            <Text style={styles.cardTitle}>About</Text>
           </View>
-        )}
+          {activeTab === 'edit' ? (
+            <TextInput
+              style={styles.bioInput}
+              value={editingProfile?.bio || ''}
+              onChangeText={(text) => setEditingProfile({ ...editingProfile, bio: text })}
+              placeholder="Tell us about yourself..."
+              placeholderTextColor={theme.placeholder}
+              multiline
+              numberOfLines={4}
+              textAlignVertical="top"
+            />
+          ) : (
+            <Text style={styles.bioText}>{userProfile.bio || 'No bio yet'}</Text>
+          )}
+        </View>
 
       </ScrollView>
+
+      {/* Toast Notification */}
+      <Toast
+        visible={toastVisible}
+        message={toastMessage}
+        type={toastType}
+        onClose={() => setToastVisible(false)}
+        duration={3000}
+      />
     </View>
   );
 }
@@ -1152,15 +1354,21 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     width: '100%',
   },
+  editRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.lightGray,
+  },
   editInputValue: {
     fontSize: 16,
     color: theme.black,
     textAlign: 'right',
     flex: 1,
     marginLeft: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.lightGray,
-    paddingBottom: 4,
+    paddingVertical: 4,
   },
   bioInput: {
     fontSize: 16,
@@ -1215,5 +1423,13 @@ const styles = StyleSheet.create({
     color: theme.white,
     fontSize: 14,
     fontWeight: '600',
+  },
+  doneButtonContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  saveSpinner: {
+    marginRight: 4,
   },
 });
