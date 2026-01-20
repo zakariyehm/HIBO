@@ -17,17 +17,17 @@ import { router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import React, { useMemo, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    Dimensions,
-    KeyboardAvoidingView,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  Dimensions,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -843,7 +843,7 @@ const OnboardingScreen = () => {
       
       // Navigate to home immediately
       console.log('🚀 Attempting navigation to home screen...');
-      router.replace('/(tabs)');
+        router.replace('/(tabs)');
       
     } catch (error: any) {
       console.error('Error creating profile:', error);

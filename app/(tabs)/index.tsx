@@ -1,10 +1,73 @@
 import { AppHeader } from '@/components/app-header';
 import { PostCard } from '@/components/post-card';
 import { Colors } from '@/constants/theme';
-import React from 'react';
-import { ScrollView, StatusBar, StyleSheet, View } from 'react-native';
+import { getAllUserProfiles, getCurrentUser } from '@/lib/supabase';
+import React, { useEffect, useState } from 'react';
+import { ActivityIndicator, ScrollView, StatusBar, StyleSheet, Text, View } from 'react-native';
+
+interface UserProfile {
+  id: string;
+  first_name: string;
+  last_name: string;
+  location: string;
+  bio: string;
+  photos: string[];
+  nationality?: string[];
+  created_at: string;
+}
 
 export default function HomeScreen() {
+  const [userProfiles, setUserProfiles] = useState<UserProfile[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchUserProfiles();
+  }, []);
+
+  const fetchUserProfiles = async () => {
+    try {
+      setLoading(true);
+      
+      // Get current user to exclude from list
+      const { user } = await getCurrentUser();
+      if (user) {
+        setCurrentUserId(user.id);
+      }
+
+      // Fetch all user profiles (excluding current user)
+      const { data, error } = await getAllUserProfiles(user?.id);
+
+      if (error) {
+        console.error('❌ Error fetching profiles:', error);
+        setLoading(false);
+        return;
+      }
+
+      if (data && data.length > 0) {
+        // Filter out profiles with no photos or bio
+        const validProfiles = data.filter(
+          (profile: any) => 
+            profile.photos && 
+            profile.photos.length > 0 && 
+            profile.bio && 
+            profile.bio.trim().length > 0
+        );
+        
+        console.log(`✅ Loaded ${validProfiles.length} user profiles`);
+        setUserProfiles(validProfiles as UserProfile[]);
+      } else {
+        console.log('⚠️  No user profiles found');
+        setUserProfiles([]);
+      }
+      
+      setLoading(false);
+    } catch (error) {
+      console.error('❌ Error in fetchUserProfiles:', error);
+      setLoading(false);
+    }
+  };
+
   const handleShare = () => {
     console.log('Share pressed');
   };
@@ -25,6 +88,19 @@ export default function HomeScreen() {
     console.log('Search:', text);
   };
 
+  // Calculate time ago
+  const getTimeAgo = (dateString: string) => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+    
+    if (diffInSeconds < 60) return 'Just now';
+    if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m`;
+    if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h`;
+    if (diffInSeconds < 604800) return `${Math.floor(diffInSeconds / 86400)}d`;
+    return `${Math.floor(diffInSeconds / 604800)}w`;
+  };
+
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" />
@@ -36,47 +112,47 @@ export default function HomeScreen() {
         showNotificationDot={true}
         showShareDot={true}
       />
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.contentContainer}
-        showsVerticalScrollIndicator={false}
-      >
-        <PostCard
-          profileName="Jake"
-          location="Austin"
-          username="DarlingDaisy"
-          timeAgo="32m"
-          postImage="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&h=400&fit=crop"
-          postText="We went on 3 dates and then he just disappeared on me. I slept with him which I'm now regretting. Should I reach out or just move on?"
-          commentCount={32}
-          onShare={handleShare}
-          onComment={handleComment}
-        />
-        
-        <PostCard
-          profileName="Sarah"
-          location="Los Angeles"
-          username="CityGirl23"
-          timeAgo="1h"
-          postImage="https://images.unsplash.com/photo-1492562080023-ab3db95bfbce?w=400&h=400&fit=crop"
-          postText="Met someone amazing but he's always busy with work. Is it worth waiting for someone who can't make time for you? I'm starting to doubt if he's really interested."
-          commentCount={45}
-          onShare={handleShare}
-          onComment={handleComment}
-        />
-        
-        <PostCard
-          profileName="Mike"
-          location="Chicago"
-          username="WindyCityMike"
-          timeAgo="2h"
-          postImage="https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=400&h=400&fit=crop"
-          postText="Dating in 2024 is so confusing. Everyone seems to want something different. How do you know if someone is genuinely interested or just playing games?"
-          commentCount={67}
-          onShare={handleShare}
-          onComment={handleComment}
-        />
-      </ScrollView>
+      
+      {loading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={Colors.primary} />
+          <Text style={styles.loadingText}>Loading profiles...</Text>
+        </View>
+      ) : userProfiles.length === 0 ? (
+        <View style={styles.emptyContainer}>
+          <Text style={styles.emptyText}>No profiles found</Text>
+          <Text style={styles.emptySubtext}>Check back later for new users!</Text>
+        </View>
+      ) : (
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.contentContainer}
+          showsVerticalScrollIndicator={false}
+        >
+          {userProfiles.map((profile) => {
+            const fullName = `${profile.first_name} ${profile.last_name}`;
+            const username = profile.first_name.toLowerCase() + profile.last_name.toLowerCase();
+            const mainPhoto = profile.photos && profile.photos.length > 0 ? profile.photos[0] : undefined;
+            
+            return (
+              <PostCard
+                key={profile.id}
+                profileName={fullName}
+                location={profile.location}
+                username={username}
+                timeAgo={getTimeAgo(profile.created_at)}
+                profileImage={mainPhoto}
+                photos={profile.photos} // Pass all photos for swiper
+                postText={profile.bio}
+                nationality={profile.nationality} // Pass nationality
+                commentCount={0}
+                onShare={handleShare}
+                onComment={handleComment}
+              />
+            );
+          })}
+        </ScrollView>
+      )}
     </View>
   );
 }
@@ -92,5 +168,33 @@ const styles = StyleSheet.create({
   contentContainer: {
     padding: 16,
     paddingTop: 16,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 12,
+  },
+  loadingText: {
+    fontSize: 16,
+    color: Colors.textLight,
+    fontWeight: '500',
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 32,
+  },
+  emptyText: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: Colors.textDark,
+    marginBottom: 8,
+  },
+  emptySubtext: {
+    fontSize: 14,
+    color: Colors.textLight,
+    textAlign: 'center',
   },
 });

@@ -211,6 +211,50 @@ export const getUserProfile = async (userId: string) => {
   return { data, error };
 };
 
+// Get all user profiles (excluding current user)
+export const getAllUserProfiles = async (excludeUserId?: string) => {
+  try {
+    console.log('🔍 Fetching all user profiles...');
+    if (excludeUserId) {
+      console.log('🚫 Excluding user:', excludeUserId);
+    }
+    
+    let query = supabase
+      .from('profiles')
+      .select('id, first_name, last_name, location, bio, photos, nationality, created_at')
+      .order('created_at', { ascending: false });
+    
+    // Exclude current user if provided
+    if (excludeUserId) {
+      query = query.neq('id', excludeUserId);
+    }
+    
+    const { data, error } = await query;
+    
+    if (error) {
+      console.error('❌ Error fetching all profiles:', error);
+      console.error('❌ Error details:', JSON.stringify(error, null, 2));
+      
+      // Check if it's an RLS policy error
+      if (error.code === '42501' || error.message?.includes('row-level security')) {
+        console.error('⚠️  RLS POLICY ERROR: Users cannot view other profiles!');
+        console.error('⚠️  Run supabase-fix-browse-profiles.sql in Supabase SQL Editor');
+      }
+      
+      return { data: null, error };
+    }
+    
+    console.log(`✅ Fetched ${data?.length || 0} user profiles`);
+    if (data && data.length > 0) {
+      console.log('📋 Profile IDs:', data.map((p: any) => p.id));
+    }
+    return { data, error: null };
+  } catch (error: any) {
+    console.error('❌ Exception fetching profiles:', error);
+    return { data: null, error };
+  }
+};
+
 // Upload images to Supabase Storage
 export const uploadImage = async (userId: string, imageUri: string, imageName: string, folder: string = 'photos') => {
   try {

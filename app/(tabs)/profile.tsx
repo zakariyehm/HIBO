@@ -290,6 +290,8 @@ export default function ProfileScreen() {
         photos: finalPhotoUrls,
         first_name: editingProfile.first_name,
         last_name: editingProfile.last_name,
+        email: editingProfile.email,
+        phone_number: editingProfile.phone_number,
         age: editingProfile.age,
         location: editingProfile.location,
         height: editingProfile.height,
@@ -298,9 +300,14 @@ export default function ProfileScreen() {
         looking_for: editingProfile.looking_for,
         profession: editingProfile.profession,
         education_level: editingProfile.education_level,
+        nationality: editingProfile.nationality || [],
         grow_up: editingProfile.grow_up,
         smoke: editingProfile.smoke,
         has_children: editingProfile.has_children,
+        personality: editingProfile.personality || [],
+        marriage_know_time: editingProfile.marriage_know_time,
+        marriage_married_time: editingProfile.marriage_married_time,
+        interests: editingProfile.interests || [],
         bio: editingProfile.bio,
         updated_at: new Date().toISOString(),
       };
@@ -762,6 +769,31 @@ export default function ProfileScreen() {
                   placeholderTextColor={theme.placeholder}
                 />
               </View>
+
+              <View style={styles.editRow}>
+                <Text style={styles.infoLabel}>📧 Email</Text>
+                <TextInput
+                  style={styles.editInputValue}
+                  value={editingProfile?.email || ''}
+                  onChangeText={(text) => setEditingProfile({ ...editingProfile, email: text })}
+                  placeholder="Email"
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  placeholderTextColor={theme.placeholder}
+                />
+              </View>
+
+              <View style={styles.editRow}>
+                <Text style={styles.infoLabel}>📱 Phone Number</Text>
+                <TextInput
+                  style={styles.editInputValue}
+                  value={editingProfile?.phone_number || ''}
+                  onChangeText={(text) => setEditingProfile({ ...editingProfile, phone_number: text })}
+                  placeholder="Phone number"
+                  keyboardType="phone-pad"
+                  placeholderTextColor={theme.placeholder}
+                />
+              </View>
             </>
           ) : (
             /* View Mode */
@@ -776,6 +808,20 @@ export default function ProfileScreen() {
                   <Text style={styles.age}>{userProfile.age} years old</Text>
                 )}
               </View>
+
+              {userProfile.email && (
+                <View style={styles.infoItem}>
+                  <Text style={styles.infoLabel}>📧 Email</Text>
+                  <Text style={styles.infoValue}>{userProfile.email}</Text>
+                </View>
+              )}
+
+              {userProfile.phone_number && (
+                <View style={styles.infoItem}>
+                  <Text style={styles.infoLabel}>📱 Phone Number</Text>
+                  <Text style={styles.infoValue}>{userProfile.phone_number}</Text>
+                </View>
+              )}
 
               {userProfile.location && (
                 <View style={styles.infoItem}>
@@ -976,27 +1022,49 @@ export default function ProfileScreen() {
         )}
 
         {/* Marriage Intentions Card */}
-        {(userProfile.marriage_know_time || userProfile.marriage_married_time) && (
+        {(userProfile.marriage_know_time || userProfile.marriage_married_time || activeTab === 'edit') && (
           <View style={styles.card}>
             <View style={styles.cardHeader}>
               <Text style={styles.cardTitle}>Marriage Intentions</Text>
-              {activeTab === 'edit' && (
-                <TouchableOpacity>
-                  <Text style={styles.editLabel}>edit</Text>
-                </TouchableOpacity>
-              )}
             </View>
-            {userProfile.marriage_know_time && (
-              <View style={styles.infoItem}>
-                <Text style={styles.infoLabel}>Know someone for</Text>
-                <Text style={styles.infoValue}>{userProfile.marriage_know_time}</Text>
-              </View>
-            )}
-            {userProfile.marriage_married_time && (
-              <View style={styles.infoItem}>
-                <Text style={styles.infoLabel}>Married within</Text>
-                <Text style={styles.infoValue}>{userProfile.marriage_married_time}</Text>
-              </View>
+            {activeTab === 'edit' ? (
+              <>
+                <View style={styles.editRow}>
+                  <Text style={styles.infoLabel}>Know someone for</Text>
+                  <TextInput
+                    style={styles.editInputValue}
+                    value={editingProfile?.marriage_know_time || ''}
+                    onChangeText={(text) => setEditingProfile({ ...editingProfile, marriage_know_time: text })}
+                    placeholder="How long to know someone"
+                    placeholderTextColor={theme.placeholder}
+                  />
+                </View>
+                <View style={styles.editRow}>
+                  <Text style={styles.infoLabel}>Married within</Text>
+                  <TextInput
+                    style={styles.editInputValue}
+                    value={editingProfile?.marriage_married_time || ''}
+                    onChangeText={(text) => setEditingProfile({ ...editingProfile, marriage_married_time: text })}
+                    placeholder="When to get married"
+                    placeholderTextColor={theme.placeholder}
+                  />
+                </View>
+              </>
+            ) : (
+              <>
+                {userProfile.marriage_know_time && (
+                  <View style={styles.infoItem}>
+                    <Text style={styles.infoLabel}>Know someone for</Text>
+                    <Text style={styles.infoValue}>{userProfile.marriage_know_time}</Text>
+                  </View>
+                )}
+                {userProfile.marriage_married_time && (
+                  <View style={styles.infoItem}>
+                    <Text style={styles.infoLabel}>Married within</Text>
+                    <Text style={styles.infoValue}>{userProfile.marriage_married_time}</Text>
+                  </View>
+                )}
+              </>
             )}
           </View>
         )}

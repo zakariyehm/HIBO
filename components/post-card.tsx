@@ -1,7 +1,9 @@
-import React from 'react';
-import { View, Text, StyleSheet, Image, TouchableOpacity } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/constants/theme';
+import { Ionicons } from '@expo/vector-icons';
+import React, { useState } from 'react';
+import { Dimensions, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 interface PostCardProps {
   title?: string;
@@ -11,7 +13,9 @@ interface PostCardProps {
   timeAgo: string;
   profileImage?: string;
   postImage?: string;
+  photos?: string[]; // Array of photos for swiper
   postText: string;
+  nationality?: string[]; // Array of nationalities
   commentCount?: number;
   onShare?: () => void;
   onComment?: () => void;
@@ -25,11 +29,25 @@ export function PostCard({
   timeAgo,
   profileImage,
   postImage,
+  photos,
   postText,
+  nationality,
   commentCount = 0,
   onShare,
   onComment,
 }: PostCardProps) {
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  
+  // Use photos array if provided, otherwise fallback to postImage
+  const imageArray = photos && photos.length > 0 ? photos : (postImage ? [postImage] : []);
+  
+  const handleScroll = (event: any) => {
+    const contentOffsetX = event.nativeEvent.contentOffset.x;
+    const cardWidth = SCREEN_WIDTH - 64; // Account for padding
+    const index = Math.round(contentOffsetX / cardWidth);
+    setCurrentImageIndex(index);
+  };
+
   return (
     <View style={styles.container}>
       {title && (
@@ -53,32 +71,68 @@ export function PostCard({
             </View>
           </View>
           <View style={styles.headerActions}>
-            <TouchableOpacity style={styles.followButton}>
-              <Text style={styles.followButtonText}>Follow</Text>
-            </TouchableOpacity>
             <TouchableOpacity style={styles.moreButton}>
               <Ionicons name="ellipsis-vertical" size={20} color={Colors.textDark} />
             </TouchableOpacity>
           </View>
         </View>
 
-        {/* Post Image */}
-        {postImage && (
+        {/* Post Images - Swiper */}
+        {imageArray.length > 0 && (
           <View style={styles.imageContainer}>
-            <Image source={{ uri: postImage }} style={styles.postImage} />
+            <ScrollView
+              horizontal
+              pagingEnabled
+              showsHorizontalScrollIndicator={false}
+              onScroll={handleScroll}
+              scrollEventThrottle={16}
+              style={styles.imageScrollView}
+            >
+              {imageArray.map((photo, index) => (
+                <Image
+                  key={index}
+                  source={{ uri: photo }}
+                  style={styles.postImage}
+                />
+              ))}
+            </ScrollView>
+            
+            {/* Pagination Dots */}
+            {imageArray.length > 1 && (
+              <View style={styles.paginationContainer}>
+                {imageArray.map((_, index) => (
+                  <View
+                    key={index}
+                    style={[
+                      styles.paginationDot,
+                      index === currentImageIndex && styles.paginationDotActive,
+                    ]}
+                  />
+                ))}
+              </View>
+            )}
+            
+            {/* Image Counter */}
+            {imageArray.length > 1 && (
+              <View style={styles.imageCounter}>
+                <Text style={styles.imageCounterText}>
+                  {currentImageIndex + 1} / {imageArray.length}
+                </Text>
+              </View>
+            )}
           </View>
         )}
 
-        {/* Action Buttons */}
+        {/* Action Buttons - Like & Pass */}
         <View style={styles.actionButtons}>
-          <View style={styles.actionButton}>
-            <Ionicons name="flag" size={16} color={Colors.green} />
-            <Text style={styles.actionButtonText}>2</Text>
-          </View>
-          <View style={styles.actionButton}>
-            <Ionicons name="flag" size={16} color={Colors.red} />
-            <Text style={styles.actionButtonText}>17</Text>
-          </View>
+          <TouchableOpacity style={[styles.actionButton, styles.likeButton]}>
+            <Ionicons name="heart" size={14} color={Colors.green} />
+            <Text style={[styles.actionButtonText, styles.likeButtonText]}>Like</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.actionButton, styles.passButton]}>
+            <Ionicons name="close" size={14} color={Colors.red} />
+            <Text style={[styles.actionButtonText, styles.passButtonText]}>Pass</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Post Text */}
@@ -89,19 +143,18 @@ export function PostCard({
               <Text style={styles.showMore}> Show more</Text>
             )}
           </Text>
+          
+          {/* Nationality */}
+          {nationality && nationality.length > 0 && (
+            <View style={styles.nationalityContainer}>
+              <Ionicons name="flag" size={14} color={Colors.textLight} style={styles.nationalityIcon} />
+              <Text style={styles.nationalityText}>
+                {nationality.join(', ')}
+              </Text>
+            </View>
+          )}
         </View>
 
-        {/* Footer */}
-        <View style={styles.footer}>
-          <TouchableOpacity style={styles.footerButton} onPress={onShare}>
-            <Ionicons name="paper-plane" size={20} color={Colors.textDark} />
-            <Text style={styles.footerButtonText}>Share</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.footerButton} onPress={onComment}>
-            <Ionicons name="chatbubble" size={20} color={Colors.textDark} />
-            <Text style={styles.commentCount}>{commentCount}</Text>
-          </TouchableOpacity>
-        </View>
       </View>
     </View>
   );
@@ -123,7 +176,7 @@ const styles = StyleSheet.create({
   },
   card: {
     backgroundColor: Colors.cardBackground,
-    borderRadius: 16,
+    borderRadius: 0,
     padding: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -158,9 +211,11 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.iconLight,
   },
   location: {
-    fontSize: 16,
+    fontSize: 12,
     color: Colors.textDark,
     fontWeight: '400',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   userInfo: {
     flexDirection: 'row',
@@ -180,18 +235,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
-  followButton: {
-    backgroundColor: Colors.primary,
-    paddingHorizontal: 20,
-    paddingVertical: 8,
-    borderRadius: 8,
-    minWidth: 80,
-  },
-  followButtonText: {
-    color: Colors.primaryText,
-    fontSize: 14,
-    fontWeight: '600',
-  },
   moreButton: {
     padding: 4,
   },
@@ -199,32 +242,87 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     borderRadius: 12,
     overflow: 'hidden',
+    position: 'relative',
+  },
+  imageScrollView: {
+    width: SCREEN_WIDTH - 64, // Account for card padding (16*2) + margin (16*2)
   },
   postImage: {
-    width: '100%',
+    width: SCREEN_WIDTH - 64,
     height: 400,
+    resizeMode: 'cover',
+  },
+  paginationContainer: {
+    position: 'absolute',
+    bottom: 12,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 6,
+  },
+  paginationDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: 'rgba(255, 255, 255, 0.5)',
+  },
+  paginationDotActive: {
+    backgroundColor: '#FFFFFF',
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  imageCounter: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
     borderRadius: 12,
+  },
+  imageCounterText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '600',
   },
   actionButtons: {
     flexDirection: 'row',
     gap: 10,
     marginBottom: 12,
+    justifyContent: 'flex-start',
   },
   actionButton: {
     backgroundColor: Colors.cardBackground,
-    paddingHorizontal: 18,
-    paddingVertical: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
     borderRadius: 20,
     borderWidth: 1,
     borderColor: Colors.border,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    justifyContent: 'center',
+    gap: 6,
+  },
+  likeButton: {
+    borderColor: Colors.green,
+    backgroundColor: '#F0FDF4',
+  },
+  passButton: {
+    borderColor: Colors.red,
+    backgroundColor: '#FEF2F2',
   },
   actionButtonText: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '600',
-    color: Colors.textDark,
+  },
+  likeButtonText: {
+    color: Colors.green,
+  },
+  passButtonText: {
+    color: Colors.red,
   },
   postTextContainer: {
     marginBottom: 12,
@@ -237,27 +335,20 @@ const styles = StyleSheet.create({
   showMore: {
     color: Colors.textLight,
   },
-  footer: {
+  nationalityContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 20,
-    paddingTop: 12,
+    marginTop: 8,
+    paddingTop: 8,
     borderTopWidth: 1,
     borderTopColor: Colors.borderLight,
   },
-  footerButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
+  nationalityIcon: {
+    marginRight: 6,
   },
-  footerButtonText: {
-    fontSize: 14,
-    color: Colors.textDark,
-    fontWeight: '500',
-  },
-  commentCount: {
-    fontSize: 14,
-    color: Colors.textDark,
+  nationalityText: {
+    fontSize: 13,
+    color: Colors.textLight,
     fontWeight: '500',
   },
 });
