@@ -1,5 +1,6 @@
 import { Colors } from '@/constants/theme';
 import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import React, { useState } from 'react';
 import { Dimensions, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
@@ -17,6 +18,7 @@ interface PostCardProps {
   postText: string;
   nationality?: string[]; // Array of nationalities
   commentCount?: number;
+  userId?: string; // User ID for profile navigation
   onShare?: () => void;
   onComment?: () => void;
 }
@@ -33,6 +35,7 @@ export function PostCard({
   postText,
   nationality,
   commentCount = 0,
+  userId,
   onShare,
   onComment,
 }: PostCardProps) {
@@ -91,16 +94,21 @@ export function PostCard({
               onPress={() => setShowMenu(false)}
             />
             <View style={styles.menuContainer}>
-              <TouchableOpacity 
-                style={styles.menuItem}
-                onPress={() => {
-                  setShowMenu(false);
-                  // Add view profile action here
-                }}
-              >
-                <Ionicons name="person-outline" size={16} color={Colors.textDark} />
-                <Text style={styles.menuItemText}>View Profile</Text>
-              </TouchableOpacity>
+            <TouchableOpacity 
+              style={styles.menuItem}
+              onPress={() => {
+                setShowMenu(false);
+                if (userId) {
+                  router.push({
+                    pathname: '/view-profile',
+                    params: { userId },
+                  });
+                }
+              }}
+            >
+              <Ionicons name="person-outline" size={16} color={Colors.textDark} />
+              <Text style={styles.menuItemText}>View Profile</Text>
+            </TouchableOpacity>
               <TouchableOpacity 
                 style={styles.menuItem}
                 onPress={() => {

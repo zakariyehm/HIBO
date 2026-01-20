@@ -181,6 +181,7 @@ export default function HomeScreen() {
                 photos={profile.photos} // Pass all photos for swiper
                 postText={profile.bio}
                 nationality={profile.nationality} // Pass nationality
+                userId={profile.id} // Pass userId for profile navigation
                 commentCount={0}
                 onShare={handleShare}
                 onComment={handleComment}
