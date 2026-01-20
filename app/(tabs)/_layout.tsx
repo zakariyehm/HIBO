@@ -57,9 +57,9 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="favorites"
+        name="match"
         options={{
-          title: 'Favorites',
+          title: 'Match',
           tabBarIcon: ({ color, size, focused }) => (
             <FontAwesome5 
               name="heart" 

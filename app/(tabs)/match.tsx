@@ -3,18 +3,18 @@ import React from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-export default function FavoritesScreen() {
+export default function MatchScreen() {
   return (
     <View style={styles.container}>
       <SafeAreaView style={styles.safeArea} edges={['top']}>
-        <Text style={styles.title}>Favorites</Text>
+        <Text style={styles.title}>Match</Text>
       </SafeAreaView>
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.contentContainer}
         showsVerticalScrollIndicator={false}
       >
-        <Text style={styles.subtitle}>Your saved posts will appear here</Text>
+        <Text style={styles.subtitle}>Your matches will appear here</Text>
       </ScrollView>
     </View>
   );
