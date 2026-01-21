@@ -1,19 +1,22 @@
 import React from 'react';
-import { TouchableOpacity, Text, StyleSheet, ActivityIndicator, ViewStyle, TextStyle } from 'react-native';
+import { TouchableOpacity, Text, StyleSheet, ActivityIndicator, ViewStyle, TextStyle, ReactNode } from 'react-native';
+import { Colors } from '@/constants/theme';
 
 interface ButtonProps {
-  title: string;
+  title?: string;
+  children?: ReactNode;
   onPress: () => void;
   variant?: 'primary' | 'secondary' | 'outline';
   size?: 'small' | 'medium' | 'large';
   disabled?: boolean;
   loading?: boolean;
-  style?: ViewStyle;
-  textStyle?: TextStyle;
+  style?: ViewStyle | ViewStyle[];
+  textStyle?: TextStyle | TextStyle[];
 }
 
 export function Button({
   title,
+  children,
   onPress,
   variant = 'primary',
   size = 'medium',
@@ -27,15 +30,15 @@ export function Button({
     styles[variant],
     styles[size],
     disabled && styles.disabled,
-    style,
-  ];
+    ...(Array.isArray(style) ? style : [style]),
+  ].filter(Boolean);
 
   const textStyles = [
     styles.text,
     styles[`${variant}Text`],
     styles[`${size}Text`],
-    textStyle,
-  ];
+    ...(Array.isArray(textStyle) ? textStyle : [textStyle]),
+  ].filter(Boolean);
 
   return (
     <TouchableOpacity
@@ -45,7 +48,9 @@ export function Button({
       activeOpacity={0.7}
     >
       {loading ? (
-        <ActivityIndicator color={variant === 'primary' ? '#fff' : '#000'} />
+        <ActivityIndicator color={variant === 'primary' ? Colors.primaryText : Colors.textDark} />
+      ) : children ? (
+        children
       ) : (
         <Text style={textStyles}>{title}</Text>
       )}
@@ -55,21 +60,23 @@ export function Button({
 
 const styles = StyleSheet.create({
   button: {
-    borderRadius: 8,
+    borderRadius: 0,
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'row',
+    borderWidth: 1,
+    borderColor: Colors.primary,
   },
   primary: {
-    backgroundColor: '#000',
+    backgroundColor: Colors.primary,
   },
   secondary: {
-    backgroundColor: '#f0f0f0',
+    backgroundColor: Colors.borderLight,
   },
   outline: {
     backgroundColor: 'transparent',
     borderWidth: 1,
-    borderColor: '#000',
+    borderColor: Colors.primary,
   },
   small: {
     paddingHorizontal: 12,
@@ -93,13 +100,13 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   primaryText: {
-    color: '#fff',
+    color: Colors.primaryText,
   },
   secondaryText: {
-    color: '#000',
+    color: Colors.textDark,
   },
   outlineText: {
-    color: '#000',
+    color: Colors.textDark,
   },
   smallText: {
     fontSize: 12,

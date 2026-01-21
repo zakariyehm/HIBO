@@ -3,7 +3,8 @@
  * First screen users see when opening the app
  */
 
-import { Toast } from '@/components/Toast';
+import { Button } from '@/components/ui/button';
+import { Notification } from '@/components/Notification';
 import { Colors } from '@/constants/theme';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
@@ -41,7 +42,7 @@ const theme = {
 const WelcomeScreen = () => {
   const insets = useSafeAreaInsets();
   const [agreeChecked, setAgreeChecked] = useState(false);
-  const [showToast, setShowToast] = useState(false);
+  const [showNotification, setShowNotification] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const spinValue = useRef(new Animated.Value(0)).current;
 
@@ -66,7 +67,7 @@ const WelcomeScreen = () => {
 
   const handleGetStarted = () => {
     if (!agreeChecked) {
-      setShowToast(true);
+      setShowNotification(true);
       return;
     }
     setIsLoading(true);
@@ -90,12 +91,12 @@ const WelcomeScreen = () => {
     <View style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
       <StatusBar style="dark" />
       
-      {/* Toast Notification */}
-      <Toast
+      {/* Notification */}
+      <Notification
         message="Please accept the Terms and Privacy Policy to continue."
-        type="info"
-        visible={showToast}
-        onClose={() => setShowToast(false)}
+        type="error"
+        visible={showNotification}
+        onClose={() => setShowNotification(false)}
         duration={4000}
       />
 
@@ -149,13 +150,16 @@ const WelcomeScreen = () => {
       {/* White Background Section with Buttons */}
       <View style={styles.whiteSection}>
         {/* Get Started Button */}
-        <TouchableOpacity 
-          style={styles.getStartedButton}
+        <Button
+          title="Get Started"
           onPress={handleGetStarted}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.getStartedButtonText}>Get Started</Text>
-        </TouchableOpacity>
+          variant="primary"
+          size="large"
+          disabled={isLoading}
+          loading={isLoading}
+          style={styles.getStartedButton}
+          textStyle={styles.getStartedButtonText}
+        />
 
         {/* Footer Text with Checkbox */}
         <View style={styles.footerContainer}>
@@ -280,11 +284,6 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-start',
   },
   getStartedButton: {
-    backgroundColor: theme.buttonBlack,
-    paddingVertical: 17,
-    borderRadius: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
     width: '100%',
     marginBottom: 24,
     shadowColor: '#000',
@@ -297,7 +296,6 @@ const styles = StyleSheet.create({
     elevation: 5,
   },
   getStartedButtonText: {
-    color: theme.white,
     fontSize: 18,
     fontWeight: '700',
     letterSpacing: 0.3,

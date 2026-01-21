@@ -3,6 +3,7 @@
  * Multi-step onboarding flow for user profile setup
  */
 
+import { Button } from '@/components/ui/button';
 import { Colors } from '@/constants/theme';
 import {
   createUserProfile,
@@ -42,6 +43,7 @@ const verticalGapAfterTitle = isSmallWidth ? 16 : 20;
 
 // Countries list for nationality selection
 const COUNTRIES = [
+  'Somali', // Always first
   'Afghan', 'Albanian', 'Algerian', 'Argentine', 'Australian', 'Austrian',
   'Bangladeshi', 'Belgian', 'Brazilian', 'British', 'Bulgarian', 'Burundian',
   'Canadian', 'Chinese', 'Colombian', 'Croatian', 'Czech',
@@ -58,13 +60,18 @@ const COUNTRIES = [
   'Pakistani', 'Palestinian', 'Philippine', 'Polish', 'Portuguese',
   'Qatari',
   'Romanian', 'Russian',
-  'Saudi', 'Singaporean', 'Somali', 'South African', 'Spanish', 'Sudanese', 'Swedish', 'Swiss', 'Syrian',
+  'Saudi', 'Singaporean', 'South African', 'Spanish', 'Sudanese', 'Swedish', 'Swiss', 'Syrian',
   'Tanzanian', 'Thai', 'Tunisian', 'Turkish',
   'Ugandan', 'Ukrainian', 'Emirati', 'American',
   'Venezuelan', 'Vietnamese',
   'Yemeni',
   'Zimbabwean'
-].sort();
+].sort((a, b) => {
+  // Keep 'Somali' at the top, sort the rest alphabetically
+  if (a === 'Somali') return -1;
+  if (b === 'Somali') return 1;
+  return a.localeCompare(b);
+});
 
 // Professions list
 const PROFESSIONS = [
@@ -325,7 +332,7 @@ const OnboardingScreen = () => {
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
   const [nationalitySearch, setNationalitySearch] = useState('');
   const [professionSearch, setProfessionSearch] = useState('');
-  const [countryCode, setCountryCode] = useState('+1');
+  const [countryCode, setCountryCode] = useState('+252');
   const [phoneNumber, setPhoneNumber] = useState('');
 
   // Base questions
@@ -337,14 +344,14 @@ const OnboardingScreen = () => {
     { key: 'height', title: 'What\'s your height (cm)?', type: 'input', keyboard: 'numeric' as const, placeholder: '175' },
     { key: 'location', title: 'Where are you located?', type: 'input', keyboard: 'default' as const, placeholder: 'New York' },
     { key: 'profession', title: "What's your profession?", type: 'professionSelect' },
-    { key: 'educationLevel', title: "What's your education level?", type: 'select', options: ['High school', 'Non-degree qualification', 'Undergraduate degree', 'Postgraduate degree', 'Doctorate', 'Other education level'] },
+    { key: 'educationLevel', title: "What's your education level?", type: 'educationLevelSelect', options: ['High school', 'Non-degree qualification', 'Undergraduate degree', 'Postgraduate degree', 'Doctorate', 'Other education level'] },
     { key: 'nationality', title: "What's your nationality?", type: 'nationalitySelect', maxSelections: 1 },
     { key: 'growUp', title: 'Where did you grow up?', type: 'input', keyboard: 'default' as const, placeholder: 'City, Country' },
     { key: 'smoke', title: 'Do you smoke?', type: 'select', options: ['Yes', 'No'] },
     { key: 'hasChildren', title: 'Do you have children?', type: 'select', options: ['Yes', 'No'] },
-    { key: 'gender', title: 'What is your gender?', type: 'select', options: ['Female', 'Male', 'Non-binary', 'Prefer not to say'] },
+    { key: 'gender', title: 'What is your gender?', type: 'select', options: ['Female', 'Male'] },
     { key: 'interestedIn', title: 'Who are you interested in?', type: 'select', options: ['Women', 'Men'] },
-    { key: 'lookingFor', title: 'What are you looking for?', type: 'select', options: ['Serious relationship', 'Casual dating', 'Friendship', 'Something casual'] },
+    { key: 'lookingFor', title: 'What are you looking for?', type: 'select', options: ['Serious relationship', 'Friendship'] },
     { key: 'personality', title: "How would you describe your personality?", type: 'personalitySelect', maxSelections: 5, subtitle: 'Select up to 5 traits to show off your personality!' },
     { key: 'marriageIntentions', title: "What are your intentions for marriage?", type: 'marriageIntentions', 
       section1: { title: "I'd like to know someone on HIBO for", options: ['1-2 months', '3-4 months', '4-12 months', '1-2 years'] },
@@ -871,7 +878,7 @@ const OnboardingScreen = () => {
         [currentQuestion.key]: `${countryCode}${phoneNumber.trim()}` 
       });
       setPhoneNumber('');
-      setCountryCode('+1');
+      setCountryCode('+252');
       setValidationErrors(prev => ({
         ...prev,
         [currentQuestion.key]: ''
@@ -969,13 +976,13 @@ const OnboardingScreen = () => {
     if (currentQuestion.type === 'phoneInput') {
       return validatePhoneNumber(phoneNumber, countryCode).isValid;
     }
-    if (currentQuestion.type === 'select' || currentQuestion.type === 'multiSelect' || currentQuestion.type === 'nationalitySelect' || currentQuestion.type === 'personalitySelect' || currentQuestion.type === 'marriageIntentions' || currentQuestion.type === 'professionSelect') {
+    if (currentQuestion.type === 'select' || currentQuestion.type === 'multiSelect' || currentQuestion.type === 'nationalitySelect' || currentQuestion.type === 'personalitySelect' || currentQuestion.type === 'marriageIntentions' || currentQuestion.type === 'professionSelect' || currentQuestion.type === 'educationLevelSelect') {
       if (currentQuestion.type === 'marriageIntentions') {
         const knowSomeone = onboardingData[currentQuestion.key + '_know'] || '';
         const marriedWithin = onboardingData[currentQuestion.key + '_married'] || '';
         return !!(knowSomeone && marriedWithin);
       }
-      if (currentQuestion.type === 'professionSelect') {
+      if (currentQuestion.type === 'professionSelect' || currentQuestion.type === 'educationLevelSelect') {
         return !!onboardingData[currentQuestion.key];
       }
       if (currentQuestion.type === 'multiSelect') {
@@ -1135,23 +1142,15 @@ const OnboardingScreen = () => {
           {!!accountError && (
             <Text style={styles.accountErrorText}>{accountError}</Text>
           )}
-          <TouchableOpacity 
-            style={[
-              styles.finalContinueButton, 
-              (accountLoading || !email.trim() || !password.trim() || !!accountError) && styles.continueButtonInactive
-            ]} 
+          <Button
+            title={accountLoading ? "Creating..." : "Create account"}
             onPress={handleCreateProfile}
+            variant={(accountLoading || !email.trim() || !password.trim() || !!accountError) ? 'secondary' : 'primary'}
             disabled={accountLoading || !email.trim() || !password.trim() || !!accountError}
-          >
-            {accountLoading ? (
-              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <ActivityIndicator size="small" color={theme.white} style={{ marginRight: 8 }} />
-                <Text style={styles.finalContinueText}>Creating...</Text>
-              </View>
-            ) : (
-              <Text style={(accountLoading || !email.trim() || !password.trim() || !!accountError) ? [styles.finalContinueText, { color: theme.gray }] : styles.finalContinueText}>Create account</Text>
-            )}
-          </TouchableOpacity>
+            loading={accountLoading}
+            style={styles.finalContinueButton}
+            textStyle={styles.finalContinueText}
+          />
         </ScrollView>
       );
     }
@@ -1201,7 +1200,7 @@ const OnboardingScreen = () => {
                           {country}
                         </Text>
                         {isSelected && (
-                          <Ionicons name="checkmark" size={20} color={theme.white} />
+                          <Ionicons name="checkmark" size={20} color={theme.buttonActive} />
                         )}
                       </TouchableOpacity>
                     );
@@ -1224,7 +1223,7 @@ const OnboardingScreen = () => {
                         {country}
                       </Text>
                       {isSelected && (
-                        <Ionicons name="checkmark" size={20} color={theme.white} />
+                        <Ionicons name="checkmark" size={20} color={theme.buttonActive} />
                       )}
                     </TouchableOpacity>
                   );
@@ -1234,26 +1233,12 @@ const OnboardingScreen = () => {
           </View>
         ) : currentQuestion.type === 'professionSelect' ? (
           <>
-            <View style={styles.searchContainer}>
-              <Ionicons name="search" size={20} color={theme.gray} style={styles.searchIcon} />
-              <TextInput
-                style={styles.searchInput}
-                placeholder="Search jobs"
-                placeholderTextColor={theme.placeholder}
-                value={professionSearch}
-                onChangeText={setProfessionSearch}
-                autoCapitalize="none"
-                autoCorrect={false}
-              />
-            </View>
             <ScrollView 
               style={[styles.scrollContainer, { marginBottom: 0 }]}
               contentContainerStyle={styles.scrollContent}
               showsVerticalScrollIndicator={false}
             >
-              {PROFESSIONS.filter(profession => 
-                professionSearch.trim() === '' || profession.toLowerCase().includes(professionSearch.toLowerCase())
-              ).map(profession => {
+              {PROFESSIONS.map(profession => {
                 const isSelected = onboardingData[currentQuestion.key] === profession;
                 return (
                   <TouchableOpacity
@@ -1269,6 +1254,55 @@ const OnboardingScreen = () => {
                       isSelected && styles.selectedProfessionText
                     ]}>
                       {profession}
+                    </Text>
+                    {isSelected && (
+                      <Ionicons name="checkmark" size={20} color={theme.buttonActive} />
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+              <TouchableOpacity
+                style={[
+                  styles.professionOption,
+                  onboardingData[currentQuestion.key] === 'Other job' && styles.selectedProfessionOption
+                ]}
+                onPress={() => handleSelectOption(currentQuestion.key, 'Other job')}
+              >
+                <Text style={[
+                  styles.professionText,
+                  onboardingData[currentQuestion.key] === 'Other job' && styles.selectedProfessionText
+                ]}>
+                  Other job
+                </Text>
+                {onboardingData[currentQuestion.key] === 'Other job' && (
+                  <Ionicons name="checkmark" size={20} color={theme.buttonActive} />
+                )}
+              </TouchableOpacity>
+            </ScrollView>
+          </>
+        ) : currentQuestion.type === 'educationLevelSelect' ? (
+          <>
+            <ScrollView 
+              style={[styles.scrollContainer, { marginBottom: 0 }]}
+              contentContainerStyle={styles.scrollContent}
+              showsVerticalScrollIndicator={false}
+            >
+              {currentQuestion.options?.map((educationLevel: string) => {
+                const isSelected = onboardingData[currentQuestion.key] === educationLevel;
+                return (
+                  <TouchableOpacity
+                    key={educationLevel}
+                    style={[
+                      styles.educationLevelOption,
+                      isSelected && styles.selectedEducationLevelOption
+                    ]}
+                    onPress={() => handleSelectOption(currentQuestion.key, educationLevel)}
+                  >
+                    <Text style={[
+                      styles.educationLevelText,
+                      isSelected && styles.selectedEducationLevelText
+                    ]}>
+                      {educationLevel}
                     </Text>
                     {isSelected && (
                       <Ionicons name="checkmark" size={20} color={theme.buttonActive} />
@@ -1306,6 +1340,9 @@ const OnboardingScreen = () => {
                     ]}>
                       {trait}
                     </Text>
+                    {isSelected && (
+                      <Ionicons name="checkmark" size={20} color={theme.buttonActive} style={styles.personalityCheckmark} />
+                    )}
                   </TouchableOpacity>
                 );
               })}
@@ -1335,7 +1372,7 @@ const OnboardingScreen = () => {
                       <Ionicons 
                         name="calendar-outline" 
                         size={18} 
-                        color={isSelected ? theme.white : theme.gray} 
+                        color={isSelected ? '#000' : theme.gray} 
                         style={styles.marriageOptionIcon}
                       />
                       <Text style={[
@@ -1344,6 +1381,9 @@ const OnboardingScreen = () => {
                       ]}>
                         {opt}
                       </Text>
+                      {isSelected && (
+                        <Ionicons name="checkmark" size={20} color={theme.buttonActive} style={styles.marriageCheckmark} />
+                      )}
                     </TouchableOpacity>
                   );
                 })}
@@ -1368,7 +1408,7 @@ const OnboardingScreen = () => {
                       <Ionicons 
                         name="heart-outline" 
                         size={18} 
-                        color={isSelected ? theme.white : theme.gray} 
+                        color={isSelected ? '#000' : theme.gray} 
                         style={styles.marriageOptionIcon}
                       />
                       <Text style={[
@@ -1377,6 +1417,9 @@ const OnboardingScreen = () => {
                       ]}>
                         {opt}
                       </Text>
+                      {isSelected && (
+                        <Ionicons name="checkmark" size={20} color={theme.buttonActive} style={styles.marriageCheckmark} />
+                      )}
                     </TouchableOpacity>
                   );
                 })}
@@ -1413,8 +1456,13 @@ const OnboardingScreen = () => {
                       <Text style={[styles.optionText, isSelected && styles.selectedOptionText]}>
                         {opt}
                       </Text>
-                      {isMultiSelect && isSelected && (
-                        <Ionicons name="checkmark-circle" size={20} color={theme.white} style={styles.checkIcon} />
+                      {isSelected && (
+                        <Ionicons 
+                          name={isMultiSelect ? "checkmark-circle" : "checkmark"} 
+                          size={20} 
+                          color={theme.buttonActive} 
+                          style={styles.checkIcon} 
+                        />
                       )}
                     </View>
                   </TouchableOpacity>
@@ -1445,21 +1493,23 @@ const OnboardingScreen = () => {
                       {photo ? (
                         <>
                           <Image source={{ uri: photo }} style={styles.photoPreview} />
-                          <TouchableOpacity
-                            style={styles.removeButton}
+                          <Button
                             onPress={() => handleRemoveImage(index)}
+                            variant="outline"
+                            style={styles.removeButton}
                           >
                             <Ionicons name="close-circle" size={24} color={theme.error} />
-                          </TouchableOpacity>
+                          </Button>
                         </>
                       ) : (
-                        <TouchableOpacity
-                          style={styles.uploadButton}
+                        <Button
                           onPress={handlePickImage}
+                          variant="outline"
+                          style={styles.uploadButton}
                         >
                           <Ionicons name="camera" size={32} color={theme.gray} />
                           <Text style={styles.uploadButtonText}>Add Photo</Text>
-                        </TouchableOpacity>
+                        </Button>
                       )}
                     </View>
                   );
@@ -1481,22 +1531,24 @@ const OnboardingScreen = () => {
                 <View style={styles.documentPreview}>
                   <Ionicons name="document" size={48} color={theme.black} />
                   <Text style={styles.documentName}>Document uploaded</Text>
-                  <TouchableOpacity
-                    style={styles.removeDocumentButton}
+                  <Button
+                    title="Remove"
                     onPress={() => handleRemoveDocument(currentQuestion.key)}
-                  >
-                    <Text style={styles.removeDocumentText}>Remove</Text>
-                  </TouchableOpacity>
+                    variant="outline"
+                    style={styles.removeDocumentButton}
+                    textStyle={styles.removeDocumentText}
+                  />
                 </View>
               ) : (
-                  <TouchableOpacity
-                    style={styles.documentUploadButton}
+                  <Button
                     onPress={() => handlePickDocument(currentQuestion.key)}
+                    variant="outline"
+                    style={styles.documentUploadButton}
                   >
                     <Ionicons name="document-outline" size={48} color={theme.gray} />
                     <Text style={styles.documentUploadText}>Tap to upload document</Text>
                     <Text style={styles.documentUploadHint}>Camera or Gallery</Text>
-                  </TouchableOpacity>
+                  </Button>
               )}
             </View>
           </ScrollView>
@@ -1526,14 +1578,15 @@ const OnboardingScreen = () => {
                     </TouchableOpacity>
                   </View>
                 ) : (
-                  <TouchableOpacity
-                    style={styles.documentUploadButton}
+                  <Button
                     onPress={() => handlePickDocument(currentQuestion.frontKey)}
+                    variant="outline"
+                    style={styles.documentUploadButton}
                   >
                     <Ionicons name="document-outline" size={48} color={theme.gray} />
                     <Text style={styles.documentUploadText}>Upload Front</Text>
                     <Text style={styles.documentUploadHint}>Camera or Gallery</Text>
-                  </TouchableOpacity>
+                  </Button>
                 )}
               </View>
 
@@ -1552,14 +1605,15 @@ const OnboardingScreen = () => {
                     </TouchableOpacity>
                   </View>
                 ) : (
-                  <TouchableOpacity
-                    style={styles.documentUploadButton}
+                  <Button
                     onPress={() => handlePickDocument(currentQuestion.backKey)}
+                    variant="outline"
+                    style={styles.documentUploadButton}
                   >
                     <Ionicons name="document-outline" size={48} color={theme.gray} />
                     <Text style={styles.documentUploadText}>Upload Back</Text>
                     <Text style={styles.documentUploadHint}>Camera or Gallery</Text>
-                  </TouchableOpacity>
+                  </Button>
                 )}
               </View>
             </View>
@@ -1575,7 +1629,7 @@ const OnboardingScreen = () => {
                   keyboardType="phone-pad"
                   autoCapitalize="none"
                   autoCorrect={false}
-                  placeholder="+1"
+                  placeholder="+252"
                   placeholderTextColor={theme.placeholder}
                   maxLength={5}
                 />
@@ -1611,18 +1665,14 @@ const OnboardingScreen = () => {
             {currentError && (
               <Text style={styles.errorText}>{currentError}</Text>
             )}
-            <TouchableOpacity 
-              style={[
-                styles.continueButton, 
-                isCurrentInputValid() ? styles.continueButtonActive : styles.continueButtonInactive
-              ]} 
-              onPress={handleNextInput} 
+            <Button
+              title="continue"
+              onPress={handleNextInput}
+              variant={isCurrentInputValid() ? 'primary' : 'secondary'}
               disabled={!isCurrentInputValid()}
-            >
-              <Text style={isCurrentInputValid() ? styles.continueTextActive : styles.continueTextInactive}>
-                continue
-              </Text>
-            </TouchableOpacity>
+              style={styles.continueButton}
+              textStyle={styles.continueText}
+            />
           </>
         ) : (
           <>
@@ -1649,38 +1699,22 @@ const OnboardingScreen = () => {
             {currentError && (
               <Text style={styles.errorText}>{currentError}</Text>
             )}
-            <TouchableOpacity 
-              style={[
-                styles.continueButton, 
-                isCurrentInputValid() ? styles.continueButtonActive : styles.continueButtonInactive
-              ]} 
-              onPress={handleNextInput} 
+            <Button
+              title="continue"
+              onPress={handleNextInput}
+              variant={isCurrentInputValid() ? 'primary' : 'secondary'}
               disabled={!isCurrentInputValid()}
-            >
-              <Text style={isCurrentInputValid() ? styles.continueTextActive : styles.continueTextInactive}>
-                continue
-              </Text>
-            </TouchableOpacity>
+              style={styles.continueButton}
+              textStyle={styles.continueText}
+            />
           </>
         )}
         {/* Continue button for multiSelect, personalitySelect, nationalitySelect, marriageIntentions, imageUpload, documentUpload, and documentUploadDouble at bottom */}
         {(isMultiSelect || currentQuestion.type === 'personalitySelect' || currentQuestion.type === 'nationalitySelect' || currentQuestion.type === 'marriageIntentions' || currentQuestion.type === 'imageUpload' || currentQuestion.type === 'documentUpload' || currentQuestion.type === 'documentUploadDouble') && (
           <>
-            <TouchableOpacity 
-              style={[
-                styles.continueButton, 
-                { bottom: 0 + insets.bottom },
-                currentQuestion.type === 'personalitySelect' 
-                  ? styles.continueButtonActive 
-                  : (isCurrentInputValid() ? styles.continueButtonActive : styles.continueButtonInactive)
-              ]} 
-              onPress={proceedToNextStep} 
-              disabled={currentQuestion.type === 'personalitySelect' ? false : !isCurrentInputValid()}
-            >
-              <Text style={currentQuestion.type === 'personalitySelect' 
-                ? styles.continueTextActive 
-                : (isCurrentInputValid() ? styles.continueTextActive : styles.continueTextInactive)}>
-                {currentQuestion.type === 'personalitySelect'
+            <Button
+              title={
+                currentQuestion.type === 'personalitySelect'
                   ? `Select (${(onboardingData[currentQuestion.key] || []).length})`
                   : currentQuestion.type === 'nationalitySelect'
                   ? (isCurrentInputValid()
@@ -1701,9 +1735,15 @@ const OnboardingScreen = () => {
                   : (isCurrentInputValid()
                       ? 'continue'
                       : 'upload document')
-                }
-              </Text>
-            </TouchableOpacity>
+              }
+              onPress={proceedToNextStep}
+              variant={currentQuestion.type === 'personalitySelect' 
+                ? 'primary' 
+                : (isCurrentInputValid() ? 'primary' : 'secondary')}
+              disabled={currentQuestion.type === 'personalitySelect' ? false : !isCurrentInputValid()}
+              style={[styles.continueButton, { bottom: 0 + insets.bottom }]}
+              textStyle={styles.continueText}
+            />
           </>
         )}
       </View>
@@ -1844,11 +1884,11 @@ const styles = StyleSheet.create({
     width: '100%',
     paddingVertical: 12,
     backgroundColor: theme.secondary,
-    borderRadius: 12,
+    borderRadius: 0,
     marginBottom: 10,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: theme.lightGray,
+    borderColor: '#000',
   },
   optionContent: {
     flexDirection: 'row',
@@ -1860,16 +1900,17 @@ const styles = StyleSheet.create({
     fontSize: optionFontSize,
   },
   selectedOptionButton: {
-    backgroundColor: theme.black,
-    borderColor: theme.black,
+    backgroundColor: theme.white,
+    borderColor: '#000',
+    borderWidth: 2,
   },
   optionText: {
     fontSize: 15,
-    color: theme.black,
+    color: '#000',
     fontWeight: '500',
   },
   selectedOptionText: {
-    color: theme.white,
+    color: '#000',
   },
   checkIcon: {
     marginLeft: 8,
@@ -1879,23 +1920,8 @@ const styles = StyleSheet.create({
     bottom: 50,
     width: width * 0.9,
     paddingVertical: 18,
-    borderRadius: 30,
-    alignItems: 'center',
   },
-  continueButtonInactive: {
-    backgroundColor: theme.buttonInactive,
-  },
-  continueButtonActive: {
-    backgroundColor: theme.buttonActive,
-  },
-  continueTextInactive: {
-    color: theme.gray,
-    fontSize: 18,
-    fontWeight: '600',
-    textTransform: 'lowercase',
-  },
-  continueTextActive: {
-    color: theme.white,
+  continueText: {
     fontSize: 18,
     fontWeight: '600',
     textTransform: 'lowercase',
@@ -1983,9 +2009,9 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
     backgroundColor: theme.secondary,
-    borderRadius: 12,
+    borderRadius: 0,
     borderWidth: 2,
-    borderColor: theme.lightGray,
+    borderColor: '#000',
     borderStyle: 'dashed',
     justifyContent: 'center',
     alignItems: 'center',
@@ -2001,7 +2027,9 @@ const styles = StyleSheet.create({
     top: -8,
     right: -8,
     backgroundColor: theme.white,
-    borderRadius: 12,
+    borderRadius: 0,
+    borderWidth: 1,
+    borderColor: '#000',
   },
   documentPreview: {
     width: '100%',
@@ -2021,6 +2049,9 @@ const styles = StyleSheet.create({
     marginTop: 10,
     paddingVertical: 8,
     paddingHorizontal: 16,
+    borderWidth: 1,
+    borderColor: '#000',
+    borderRadius: 0,
   },
   removeDocumentText: {
     color: theme.error,
@@ -2031,9 +2062,9 @@ const styles = StyleSheet.create({
     width: '100%',
     padding: 40,
     backgroundColor: theme.secondary,
-    borderRadius: 12,
+    borderRadius: 0,
     borderWidth: 2,
-    borderColor: theme.lightGray,
+    borderColor: '#000',
     borderStyle: 'dashed',
     alignItems: 'center',
     justifyContent: 'center',
@@ -2109,22 +2140,23 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 15,
     backgroundColor: theme.secondary,
-    borderRadius: 12,
+    borderRadius: 0,
     marginBottom: 10,
     borderWidth: 1,
-    borderColor: theme.lightGray,
+    borderColor: '#000',
   },
   selectedNationalityOption: {
-    backgroundColor: theme.black,
-    borderColor: theme.black,
+    backgroundColor: theme.white,
+    borderColor: '#000',
+    borderWidth: 2,
   },
   nationalityText: {
     fontSize: 15,
-    color: theme.black,
+    color: '#000',
     fontWeight: '500',
   },
   selectedNationalityText: {
-    color: theme.white,
+    color: '#000',
   },
   personalityContainer: {
     flex: 1,
@@ -2151,14 +2183,15 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 12,
     backgroundColor: theme.secondary,
-    borderRadius: 12,
+    borderRadius: 0,
     marginBottom: 10,
     borderWidth: 1,
-    borderColor: theme.lightGray,
+    borderColor: '#000',
   },
   selectedPersonalityButton: {
-    backgroundColor: theme.black,
-    borderColor: theme.black,
+    backgroundColor: theme.white,
+    borderColor: '#000',
+    borderWidth: 2,
   },
   personalityEmoji: {
     fontSize: 18,
@@ -2166,12 +2199,15 @@ const styles = StyleSheet.create({
   },
   personalityText: {
     fontSize: 15,
-    color: theme.black,
+    color: '#000',
     fontWeight: '500',
     flex: 1,
   },
   selectedPersonalityText: {
-    color: theme.white,
+    color: '#000',
+  },
+  personalityCheckmark: {
+    marginLeft: 8,
   },
   marriageSection: {
     width: '100%',
@@ -2193,25 +2229,30 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 16,
     backgroundColor: theme.secondary,
-    borderRadius: 12,
+    borderRadius: 0,
     marginBottom: 10,
     borderWidth: 1,
-    borderColor: theme.lightGray,
+    borderColor: '#000',
   },
   selectedMarriageOption: {
-    backgroundColor: theme.black,
-    borderColor: theme.black,
+    backgroundColor: theme.white,
+    borderColor: '#000',
+    borderWidth: 2,
   },
   marriageOptionIcon: {
     marginRight: 12,
   },
   marriageOptionText: {
     fontSize: 15,
-    color: theme.black,
+    color: '#000',
     fontWeight: '500',
+    flex: 1,
   },
   selectedMarriageOptionText: {
-    color: theme.white,
+    color: '#000',
+  },
+  marriageCheckmark: {
+    marginLeft: 8,
   },
   professionContainer: {
     flex: 1,
@@ -2225,22 +2266,50 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 16,
     backgroundColor: theme.secondary,
-    borderRadius: 12,
+    borderRadius: 0,
     marginBottom: 10,
     borderWidth: 1,
-    borderColor: theme.lightGray,
+    borderColor: '#000',
   },
   selectedProfessionOption: {
     backgroundColor: theme.white,
-    borderColor: theme.buttonActive,
+    borderColor: '#000',
+    borderWidth: 2,
   },
   professionText: {
     fontSize: 15,
-    color: theme.black,
+    color: '#000',
     fontWeight: '500',
   },
   selectedProfessionText: {
-    color: theme.buttonActive,
+    color: '#000',
+    fontWeight: '600',
+  },
+  educationLevelOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '100%',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: theme.secondary,
+    borderRadius: 0,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#000',
+  },
+  selectedEducationLevelOption: {
+    backgroundColor: theme.white,
+    borderColor: '#000',
+    borderWidth: 2,
+  },
+  educationLevelText: {
+    fontSize: 15,
+    color: '#000',
+    fontWeight: '500',
+  },
+  selectedEducationLevelText: {
+    color: '#000',
     fontWeight: '600',
   },
   phoneInputContainer: {
@@ -2330,15 +2399,11 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   finalContinueButton: {
-    backgroundColor: theme.buttonActive,
     paddingVertical: 18,
-    borderRadius: 30,
-    alignItems: 'center',
     width: '100%',
     marginTop: 10,
   },
   finalContinueText: {
-    color: theme.white,
     fontSize: 18,
     fontWeight: '600',
   },

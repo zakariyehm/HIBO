@@ -4,6 +4,7 @@
  */
 
 import { Toast } from '@/components/Toast';
+import { Button } from '@/components/ui/button';
 import { getUserProfile, signInWithEmail } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
@@ -160,14 +161,6 @@ export default function LoginScreen() {
     }
   };
 
-  const handleGoogleSignIn = async () => {
-    setIsLoading(true);
-    showNotification('Google sign-in not yet implemented.', 'info');
-    setTimeout(() => {
-      setIsLoading(false);
-    }, 1000);
-  };
-
   const handleTermsPress = () => {
     Linking.openURL('https://example.com/terms');
   };
@@ -244,16 +237,16 @@ export default function LoginScreen() {
             </View>
 
             {/* Continue Button */}
-            <TouchableOpacity
-              style={[styles.continueButton, isLoading && styles.disabledButton]}
+            <Button
+              title={isLoading ? 'Signing in...' : 'Login'}
               onPress={handleSignIn}
+              variant="primary"
+              size="large"
               disabled={isLoading}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.continueButtonText}>
-                {isLoading ? 'Signing in...' : 'Login'}
-              </Text>
-            </TouchableOpacity>
+              loading={isLoading}
+              style={styles.continueButton}
+              textStyle={styles.continueButtonText}
+            />
 
             {/* Don't have account */}
             <View style={styles.noAccountContainer}>
@@ -262,26 +255,6 @@ export default function LoginScreen() {
                 <Text style={styles.signUpLink}>Sign up</Text>
               </TouchableOpacity>
             </View>
-          </View>
-
-          {/* OR Separator */}
-          <View style={styles.separatorContainer}>
-            <View style={styles.separatorLine} />
-            <Text style={styles.separatorText}>OR</Text>
-            <View style={styles.separatorLine} />
-          </View>
-
-          {/* Alternative Sign In Methods */}
-          <View style={styles.alternativeMethods}>
-            <TouchableOpacity
-              style={[styles.socialButton, isLoading && styles.disabledButton]}
-              onPress={handleGoogleSignIn}
-              disabled={isLoading}
-              activeOpacity={0.8}
-            >
-              <Ionicons name="logo-google" size={20} color="#DB4437" />
-              <Text style={styles.socialButtonText}>Continue with Google</Text>
-            </TouchableOpacity>
           </View>
 
           {/* Footer Links */}
@@ -313,7 +286,7 @@ const styles = StyleSheet.create({
   },
   logoContainer: {
     alignItems: 'center',
-    marginBottom: 40,
+    marginBottom: 0,
   },
   appName: {
     fontSize: 48,
@@ -329,7 +302,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   formContainer: {
-    marginBottom: 24,
+    marginBottom: 150,
   },
   inputContainer: {
     marginBottom: 20,
@@ -344,7 +317,7 @@ const styles = StyleSheet.create({
     backgroundColor: theme.white,
     borderWidth: 1,
     borderColor: theme.lightGray,
-    borderRadius: 12,
+    borderRadius: 0,
     paddingHorizontal: 16,
     paddingVertical: 14,
     fontSize: 16,
@@ -363,10 +336,6 @@ const styles = StyleSheet.create({
     padding: 4,
   },
   continueButton: {
-    backgroundColor: theme.buttonActive,
-    borderRadius: 12,
-    paddingVertical: 16,
-    alignItems: 'center',
     marginTop: 8,
     shadowColor: '#000',
     shadowOffset: {
@@ -378,12 +347,8 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   continueButtonText: {
-    color: theme.white,
     fontSize: 16,
     fontWeight: '600',
-  },
-  disabledButton: {
-    opacity: 0.6,
   },
   noAccountContainer: {
     flexDirection: 'row',
@@ -400,42 +365,6 @@ const styles = StyleSheet.create({
     color: theme.buttonActive,
     fontWeight: '600',
     textDecorationLine: 'underline',
-  },
-  separatorContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginVertical: 24,
-  },
-  separatorLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: theme.lightGray,
-  },
-  separatorText: {
-    marginHorizontal: 16,
-    fontSize: 14,
-    color: theme.gray,
-    fontWeight: '500',
-  },
-  alternativeMethods: {
-    marginBottom: 24,
-  },
-  socialButton: {
-    backgroundColor: theme.white,
-    borderRadius: 12,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: theme.lightGray,
-  },
-  socialButtonText: {
-    marginLeft: 12,
-    fontSize: 16,
-    color: theme.black,
-    fontWeight: '500',
   },
   footer: {
     flexDirection: 'row',
