@@ -334,7 +334,7 @@ export default function ProfileScreen() {
       setUserProfile(updatedProfile);
       setEditingProfile(updatedProfile);
       setNewPhotos([]); // Clear new photos list
-      setActiveTab('view');
+    setActiveTab('view');
       setSaving(false);
       
       // Show success toast
@@ -408,7 +408,7 @@ export default function ProfileScreen() {
         if (sessionError) {
           console.error('Session error:', sessionError);
           showToast('Failed to get user session', 'error');
-          setLoading(false);
+      setLoading(false);
           return;
         }
         
@@ -591,7 +591,7 @@ export default function ProfileScreen() {
                     <View style={styles.imageErrorContainer}>
                       <Ionicons name="image-outline" size={60} color={theme.gray} />
                       <Text style={styles.imageErrorText}>Failed to load</Text>
-                      {activeTab === 'edit' && (
+                  {activeTab === 'edit' && (
                         <TouchableOpacity
                           style={styles.retryButton}
                           onPress={() => {
@@ -798,16 +798,16 @@ export default function ProfileScreen() {
           ) : (
             /* View Mode */
             <>
-              <View style={styles.nameSection}>
-                <Text style={styles.name}>
+          <View style={styles.nameSection}>
+            <Text style={styles.name}>
                   {userProfile.first_name && userProfile.last_name
                     ? `${userProfile.first_name} ${userProfile.last_name}`
                     : 'User'}
-                </Text>
-                {userProfile.age && (
-                  <Text style={styles.age}>{userProfile.age} years old</Text>
-                )}
-              </View>
+            </Text>
+            {userProfile.age && (
+              <Text style={styles.age}>{userProfile.age} years old</Text>
+            )}
+          </View>
 
               {userProfile.email && (
                 <View style={styles.infoItem}>
@@ -823,25 +823,25 @@ export default function ProfileScreen() {
                 </View>
               )}
 
-              {userProfile.location && (
-                <View style={styles.infoItem}>
-                  <Text style={styles.infoLabel}>📍 Location</Text>
-                  <Text style={styles.infoValue}>{userProfile.location}</Text>
-                </View>
-              )}
+          {userProfile.location && (
+            <View style={styles.infoItem}>
+              <Text style={styles.infoLabel}>📍 Location</Text>
+              <Text style={styles.infoValue}>{userProfile.location}</Text>
+            </View>
+          )}
 
-              {userProfile.height && (
-                <View style={styles.infoItem}>
-                  <Text style={styles.infoLabel}>📏 Height</Text>
-                  <Text style={styles.infoValue}>{userProfile.height} cm</Text>
-                </View>
-              )}
+          {userProfile.height && (
+            <View style={styles.infoItem}>
+              <Text style={styles.infoLabel}>📏 Height</Text>
+              <Text style={styles.infoValue}>{userProfile.height} cm</Text>
+            </View>
+          )}
 
-              {userProfile.gender && (
-                <View style={styles.infoItem}>
-                  <Text style={styles.infoLabel}>👤 Gender</Text>
-                  <Text style={styles.infoValue}>{userProfile.gender}</Text>
-                </View>
+          {userProfile.gender && (
+            <View style={styles.infoItem}>
+              <Text style={styles.infoLabel}>👤 Gender</Text>
+              <Text style={styles.infoValue}>{userProfile.gender}</Text>
+            </View>
               )}
             </>
           )}
@@ -878,16 +878,16 @@ export default function ProfileScreen() {
           ) : (
             <>
               {userProfile.interested_in && (
-                <View style={styles.infoItem}>
-                  <Text style={styles.infoLabel}>Interested in</Text>
+            <View style={styles.infoItem}>
+              <Text style={styles.infoLabel}>Interested in</Text>
                   <Text style={styles.infoValue}>{userProfile.interested_in}</Text>
-                </View>
-              )}
+            </View>
+          )}
               {userProfile.looking_for && (
-                <View style={styles.infoItem}>
-                  <Text style={styles.infoLabel}>Looking for</Text>
+            <View style={styles.infoItem}>
+              <Text style={styles.infoLabel}>Looking for</Text>
                   <Text style={styles.infoValue}>{userProfile.looking_for}</Text>
-                </View>
+            </View>
               )}
             </>
           )}
@@ -923,27 +923,27 @@ export default function ProfileScreen() {
             </>
           ) : (
             <>
-              {userProfile.profession && (
-                <View style={styles.infoItem}>
-                  <Text style={styles.infoLabel}>💼 Profession</Text>
-                  <Text style={styles.infoValue}>{userProfile.profession}</Text>
-                </View>
-              )}
+          {userProfile.profession && (
+            <View style={styles.infoItem}>
+              <Text style={styles.infoLabel}>💼 Profession</Text>
+              <Text style={styles.infoValue}>{userProfile.profession}</Text>
+            </View>
+          )}
               {userProfile.education_level && (
-                <View style={styles.infoItem}>
-                  <Text style={styles.infoLabel}>🎓 Education</Text>
+            <View style={styles.infoItem}>
+              <Text style={styles.infoLabel}>🎓 Education</Text>
                   <Text style={styles.infoValue}>{userProfile.education_level}</Text>
-                </View>
+            </View>
               )}
             </>
           )}
         </View>
 
         {/* Personal Details Card */}
-        <View style={styles.card}>
-          <View style={styles.cardHeader}>
-            <Text style={styles.cardTitle}>Personal Details</Text>
-          </View>
+          <View style={styles.card}>
+            <View style={styles.cardHeader}>
+              <Text style={styles.cardTitle}>Personal Details</Text>
+            </View>
           {activeTab === 'edit' ? (
             <>
               <View style={styles.editRow}>
@@ -979,32 +979,32 @@ export default function ProfileScreen() {
             </>
           ) : (
             <>
-              {userProfile.nationality && userProfile.nationality.length > 0 && (
-                <View style={styles.infoItem}>
-                  <Text style={styles.infoLabel}>🌍 Nationality</Text>
-                  <Text style={styles.infoValue}>{userProfile.nationality.join(', ')}</Text>
-                </View>
-              )}
+            {userProfile.nationality && userProfile.nationality.length > 0 && (
+              <View style={styles.infoItem}>
+                <Text style={styles.infoLabel}>🌍 Nationality</Text>
+                <Text style={styles.infoValue}>{userProfile.nationality.join(', ')}</Text>
+              </View>
+            )}
               {userProfile.grow_up && (
-                <View style={styles.infoItem}>
-                  <Text style={styles.infoLabel}>🏠 Grew up in</Text>
+              <View style={styles.infoItem}>
+                <Text style={styles.infoLabel}>🏠 Grew up in</Text>
                   <Text style={styles.infoValue}>{userProfile.grow_up}</Text>
-                </View>
-              )}
-              {userProfile.smoke && (
-                <View style={styles.infoItem}>
-                  <Text style={styles.infoLabel}>🚭 Smoke</Text>
-                  <Text style={styles.infoValue}>{userProfile.smoke}</Text>
-                </View>
-              )}
+              </View>
+            )}
+            {userProfile.smoke && (
+              <View style={styles.infoItem}>
+                <Text style={styles.infoLabel}>🚭 Smoke</Text>
+                <Text style={styles.infoValue}>{userProfile.smoke}</Text>
+              </View>
+            )}
               {userProfile.has_children && (
-                <View style={styles.infoItem}>
-                  <Text style={styles.infoLabel}>👶 Has children</Text>
+              <View style={styles.infoItem}>
+                <Text style={styles.infoLabel}>👶 Has children</Text>
                   <Text style={styles.infoValue}>{userProfile.has_children}</Text>
-                </View>
-              )}
+              </View>
+            )}
             </>
-          )}
+        )}
         </View>
 
         {/* Personality Card */}
@@ -1053,16 +1053,16 @@ export default function ProfileScreen() {
             ) : (
               <>
                 {userProfile.marriage_know_time && (
-                  <View style={styles.infoItem}>
-                    <Text style={styles.infoLabel}>Know someone for</Text>
+              <View style={styles.infoItem}>
+                <Text style={styles.infoLabel}>Know someone for</Text>
                     <Text style={styles.infoValue}>{userProfile.marriage_know_time}</Text>
-                  </View>
-                )}
+              </View>
+            )}
                 {userProfile.marriage_married_time && (
-                  <View style={styles.infoItem}>
-                    <Text style={styles.infoLabel}>Married within</Text>
+              <View style={styles.infoItem}>
+                <Text style={styles.infoLabel}>Married within</Text>
                     <Text style={styles.infoValue}>{userProfile.marriage_married_time}</Text>
-                  </View>
+              </View>
                 )}
               </>
             )}
@@ -1084,10 +1084,10 @@ export default function ProfileScreen() {
         )}
 
         {/* Bio Card */}
-        <View style={styles.card}>
-          <View style={styles.cardHeader}>
-            <Text style={styles.cardTitle}>About</Text>
-          </View>
+          <View style={styles.card}>
+            <View style={styles.cardHeader}>
+              <Text style={styles.cardTitle}>About</Text>
+            </View>
           {activeTab === 'edit' ? (
             <TextInput
               style={styles.bioInput}
@@ -1102,7 +1102,7 @@ export default function ProfileScreen() {
           ) : (
             <Text style={styles.bioText}>{userProfile.bio || 'No bio yet'}</Text>
           )}
-        </View>
+          </View>
 
       </ScrollView>
 

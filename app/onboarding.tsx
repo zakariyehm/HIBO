@@ -5,10 +5,10 @@
 
 import { Colors } from '@/constants/theme';
 import {
-    createUserProfile,
-    signUpWithEmail,
-    uploadDocument,
-    uploadPhotos
+  createUserProfile,
+  signUpWithEmail,
+  uploadDocument,
+  uploadPhotos
 } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
@@ -343,7 +343,7 @@ const OnboardingScreen = () => {
     { key: 'smoke', title: 'Do you smoke?', type: 'select', options: ['Yes', 'No'] },
     { key: 'hasChildren', title: 'Do you have children?', type: 'select', options: ['Yes', 'No'] },
     { key: 'gender', title: 'What is your gender?', type: 'select', options: ['Female', 'Male', 'Non-binary', 'Prefer not to say'] },
-    { key: 'interestedIn', title: 'Who are you interested in?', type: 'select', options: ['Women', 'Men', 'Everyone'] },
+    { key: 'interestedIn', title: 'Who are you interested in?', type: 'select', options: ['Women', 'Men'] },
     { key: 'lookingFor', title: 'What are you looking for?', type: 'select', options: ['Serious relationship', 'Casual dating', 'Friendship', 'Something casual'] },
     { key: 'personality', title: "How would you describe your personality?", type: 'personalitySelect', maxSelections: 5, subtitle: 'Select up to 5 traits to show off your personality!' },
     { key: 'marriageIntentions', title: "What are your intentions for marriage?", type: 'marriageIntentions', 

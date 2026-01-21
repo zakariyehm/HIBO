@@ -1,8 +1,9 @@
 import { Colors } from '@/constants/theme';
+import { likeUser, passUser } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useState } from 'react';
-import { Dimensions, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Dimensions, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -21,6 +22,8 @@ interface PostCardProps {
   userId?: string; // User ID for profile navigation
   onShare?: () => void;
   onComment?: () => void;
+  onLike?: (userId: string) => void; // Callback when user is liked
+  onPass?: (userId: string) => void; // Callback when user is passed
 }
 
 export function PostCard({
@@ -38,9 +41,13 @@ export function PostCard({
   userId,
   onShare,
   onComment,
+  onLike,
+  onPass,
 }: PostCardProps) {
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [showMenu, setShowMenu] = useState(false);
+  const [liking, setLiking] = useState(false);
+  const [passing, setPassing] = useState(false);
   
   // Use photos array if provided, otherwise fallback to postImage
   const imageArray = photos && photos.length > 0 ? photos : (postImage ? [postImage] : []);
@@ -50,6 +57,74 @@ export function PostCard({
     const cardWidth = SCREEN_WIDTH - 64; // Account for padding
     const index = Math.round(contentOffsetX / cardWidth);
     setCurrentImageIndex(index);
+  };
+
+  const handleLike = async () => {
+    if (!userId || liking || passing) return;
+
+    try {
+      setLiking(true);
+      const { data, error } = await likeUser(userId);
+
+      if (error) {
+        console.error('❌ Error liking user:', error);
+        Alert.alert('Error', 'Failed to like user. Please try again.');
+        setLiking(false);
+        return;
+      }
+
+      // Check if it's a match!
+      if (data?.match) {
+        Alert.alert(
+          '🎉 It\'s a Match!',
+          `You and ${profileName} liked each other!`,
+          [
+            { text: 'View Match', onPress: () => router.push('/(tabs)/match') },
+            { text: 'OK', style: 'default' },
+          ]
+        );
+      } else {
+        Alert.alert('✅ Liked!', `You liked ${profileName}`);
+      }
+
+      // Call parent's onLike callback if provided
+      if (onLike) {
+        onLike(userId);
+      }
+
+      setLiking(false);
+    } catch (error) {
+      console.error('❌ Exception in handleLike:', error);
+      Alert.alert('Error', 'An unexpected error occurred.');
+      setLiking(false);
+    }
+  };
+
+  const handlePass = async () => {
+    if (!userId || liking || passing) return;
+
+    try {
+      setPassing(true);
+      const { data, error } = await passUser(userId);
+
+      if (error) {
+        console.error('❌ Error passing user:', error);
+        Alert.alert('Error', 'Failed to pass user. Please try again.');
+        setPassing(false);
+        return;
+      }
+
+      // Call parent's onPass callback if provided
+      if (onPass) {
+        onPass(userId);
+      }
+
+      setPassing(false);
+    } catch (error) {
+      console.error('❌ Exception in handlePass:', error);
+      Alert.alert('Error', 'An unexpected error occurred.');
+      setPassing(false);
+    }
   };
 
   return (
@@ -181,13 +256,33 @@ export function PostCard({
 
         {/* Action Buttons - Like & Pass */}
         <View style={styles.actionButtons}>
-          <TouchableOpacity style={[styles.actionButton, styles.likeButton]}>
-            <Ionicons name="heart" size={14} color={Colors.green} />
-            <Text style={[styles.actionButtonText, styles.likeButtonText]}>Like</Text>
+          <TouchableOpacity 
+            style={[styles.actionButton, styles.likeButton, (liking || passing) && styles.actionButtonDisabled]}
+            onPress={handleLike}
+            disabled={liking || passing || !userId}
+          >
+            {liking ? (
+              <ActivityIndicator size="small" color={Colors.green} />
+            ) : (
+              <>
+                <Ionicons name="heart" size={14} color={Colors.green} />
+                <Text style={[styles.actionButtonText, styles.likeButtonText]}>Like</Text>
+              </>
+            )}
           </TouchableOpacity>
-          <TouchableOpacity style={[styles.actionButton, styles.passButton]}>
-            <Ionicons name="close" size={14} color={Colors.red} />
-            <Text style={[styles.actionButtonText, styles.passButtonText]}>Pass</Text>
+          <TouchableOpacity 
+            style={[styles.actionButton, styles.passButton, (liking || passing) && styles.actionButtonDisabled]}
+            onPress={handlePass}
+            disabled={liking || passing || !userId}
+          >
+            {passing ? (
+              <ActivityIndicator size="small" color={Colors.red} />
+            ) : (
+              <>
+                <Ionicons name="close" size={14} color={Colors.red} />
+                <Text style={[styles.actionButtonText, styles.passButtonText]}>Pass</Text>
+              </>
+            )}
           </TouchableOpacity>
         </View>
 
@@ -421,6 +516,9 @@ const styles = StyleSheet.create({
   },
   passButtonText: {
     color: Colors.red,
+  },
+  actionButtonDisabled: {
+    opacity: 0.5,
   },
   postTextContainer: {
     marginBottom: 12,

@@ -221,7 +221,7 @@ export const getAllUserProfiles = async (excludeUserId?: string) => {
     
     let query = supabase
       .from('profiles')
-      .select('id, first_name, last_name, location, bio, photos, nationality, created_at')
+      .select('id, first_name, last_name, location, bio, photos, nationality, gender, interested_in, created_at')
       .order('created_at', { ascending: false });
     
     // Exclude current user if provided
@@ -339,5 +339,236 @@ export const uploadPhotos = async (userId: string, photos: string[]) => {
 // Upload documents
 export const uploadDocument = async (userId: string, documentUri: string, documentName: string) => {
   return uploadImage(userId, documentUri, documentName, 'documents');
+};
+
+// Likes and Matches functions
+export const likeUser = async (likedUserId: string) => {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) {
+      return { data: null, error: { message: 'Not authenticated' } };
+    }
+
+    const likerId = session.user.id;
+
+    // Check if already liked/passed
+    const { data: existingLike } = await supabase
+      .from('likes')
+      .select('*')
+      .eq('liker_id', likerId)
+      .eq('liked_id', likedUserId)
+      .single();
+
+    if (existingLike) {
+      // Update existing like/pass to like
+      const { data, error } = await supabase
+        .from('likes')
+        .update({ action: 'like', created_at: new Date().toISOString() })
+        .eq('liker_id', likerId)
+        .eq('liked_id', likedUserId)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('❌ Error updating like:', error);
+        return { data: null, error };
+      }
+
+      // Check for match
+      const matchResult = await checkForMatch(likerId, likedUserId);
+      return { data: { like: data, match: matchResult.data }, error: null };
+    } else {
+      // Create new like
+      const { data, error } = await supabase
+        .from('likes')
+        .insert({
+          liker_id: likerId,
+          liked_id: likedUserId,
+          action: 'like',
+        })
+        .select()
+        .single();
+
+      if (error) {
+        console.error('❌ Error creating like:', error);
+        return { data: null, error };
+      }
+
+      // Check for match
+      const matchResult = await checkForMatch(likerId, likedUserId);
+      return { data: { like: data, match: matchResult.data }, error: null };
+    }
+  } catch (error: any) {
+    console.error('❌ Exception in likeUser:', error);
+    return { data: null, error };
+  }
+};
+
+export const passUser = async (passedUserId: string) => {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) {
+      return { data: null, error: { message: 'Not authenticated' } };
+    }
+
+    const likerId = session.user.id;
+
+    // Check if already liked/passed
+    const { data: existingLike } = await supabase
+      .from('likes')
+      .select('*')
+      .eq('liker_id', likerId)
+      .eq('liked_id', passedUserId)
+      .single();
+
+    if (existingLike) {
+      // Update existing like/pass to pass
+      const { data, error } = await supabase
+        .from('likes')
+        .update({ action: 'pass', created_at: new Date().toISOString() })
+        .eq('liker_id', likerId)
+        .eq('liked_id', passedUserId)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('❌ Error updating pass:', error);
+        return { data: null, error };
+      }
+
+      return { data, error: null };
+    } else {
+      // Create new pass
+      const { data, error } = await supabase
+        .from('likes')
+        .insert({
+          liker_id: likerId,
+          liked_id: passedUserId,
+          action: 'pass',
+        })
+        .select()
+        .single();
+
+      if (error) {
+        console.error('❌ Error creating pass:', error);
+        return { data: null, error };
+      }
+
+      return { data, error: null };
+    }
+  } catch (error: any) {
+    console.error('❌ Exception in passUser:', error);
+    return { data: null, error };
+  }
+};
+
+export const checkForMatch = async (userId1: string, userId2: string) => {
+  try {
+    // Check if user2 has also liked user1
+    const { data: mutualLike, error } = await supabase
+      .from('likes')
+      .select('*')
+      .eq('liker_id', userId2)
+      .eq('liked_id', userId1)
+      .eq('action', 'like')
+      .single();
+
+    if (error || !mutualLike) {
+      return { data: null, error: null }; // No match
+    }
+
+    // Match found! Get match record
+    const { data: match, error: matchError } = await supabase
+      .from('matches')
+      .select('*')
+      .or(`and(user1_id.eq.${userId1},user2_id.eq.${userId2}),and(user1_id.eq.${userId2},user2_id.eq.${userId1})`)
+      .single();
+
+    if (matchError && matchError.code !== 'PGRST116') {
+      console.error('❌ Error checking match:', matchError);
+      return { data: null, error: matchError };
+    }
+
+    return { data: match, error: null };
+  } catch (error: any) {
+    console.error('❌ Exception in checkForMatch:', error);
+    return { data: null, error };
+  }
+};
+
+export const getUserMatches = async () => {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) {
+      return { data: null, error: { message: 'Not authenticated' } };
+    }
+
+    const userId = session.user.id;
+
+    // Get all matches for this user
+    const { data, error } = await supabase
+      .from('matches')
+      .select('*')
+      .or(`user1_id.eq.${userId},user2_id.eq.${userId}`)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('❌ Error fetching matches:', error);
+      return { data: null, error };
+    }
+
+    // Get match partner profiles
+    const matchProfiles = await Promise.all(
+      (data || []).map(async (match) => {
+        const partnerId = match.user1_id === userId ? match.user2_id : match.user1_id;
+        const { data: profile } = await getUserProfile(partnerId);
+        return {
+          match,
+          profile,
+        };
+      })
+    );
+
+    return { data: matchProfiles, error: null };
+  } catch (error: any) {
+    console.error('❌ Exception in getUserMatches:', error);
+    return { data: null, error };
+  }
+};
+
+export const getUserLikes = async () => {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) {
+      return { data: null, error: { message: 'Not authenticated' } };
+    }
+
+    const userId = session.user.id;
+
+    // Get all users this user has liked
+    const { data: likes, error } = await supabase
+      .from('likes')
+      .select('liked_id')
+      .eq('liker_id', userId)
+      .eq('action', 'like');
+
+    if (error) {
+      console.error('❌ Error fetching likes:', error);
+      return { data: null, error };
+    }
+
+    // Get profiles of liked users
+    const likedProfiles = await Promise.all(
+      (likes || []).map(async (like) => {
+        const { data: profile } = await getUserProfile(like.liked_id);
+        return profile;
+      })
+    );
+
+    return { data: likedProfiles.filter(Boolean), error: null };
+  } catch (error: any) {
+    console.error('❌ Exception in getUserLikes:', error);
+    return { data: null, error };
+  }
 };
 

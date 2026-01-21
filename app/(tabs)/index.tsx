@@ -1,7 +1,7 @@
 import { AppHeader } from '@/components/app-header';
 import { PostCard } from '@/components/post-card';
 import { Colors } from '@/constants/theme';
-import { getAllUserProfiles, getCurrentUser } from '@/lib/supabase';
+import { getAllUserProfiles, getCurrentUser, getUserProfile } from '@/lib/supabase';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, ScrollView, StatusBar, StyleSheet, Text, View } from 'react-native';
 
@@ -13,6 +13,8 @@ interface UserProfile {
   bio: string;
   photos: string[];
   nationality?: string[];
+  gender?: string;
+  interested_in?: string;
   created_at: string;
 }
 
@@ -31,10 +33,20 @@ export default function HomeScreen() {
     try {
       setLoading(true);
       
-      // Get current user to exclude from list
+      // Get current user to exclude from list and get their preferences
       const { user } = await getCurrentUser();
       if (user) {
         setCurrentUserId(user.id);
+      }
+
+      // Get current user's profile to check their interest preference
+      let currentUserInterest: string | null = null;
+      if (user) {
+        const { data: currentUserProfile } = await getUserProfile(user.id);
+        if (currentUserProfile?.interested_in) {
+          currentUserInterest = currentUserProfile.interested_in;
+          console.log(`👤 Current user interested in: ${currentUserInterest}`);
+        }
       }
 
       // Fetch all user profiles (excluding current user)
@@ -48,13 +60,30 @@ export default function HomeScreen() {
 
       if (data && data.length > 0) {
         // Filter out profiles with no photos or bio
-        const validProfiles = data.filter(
+        let validProfiles = data.filter(
           (profile: any) => 
             profile.photos && 
             profile.photos.length > 0 && 
             profile.bio && 
             profile.bio.trim().length > 0
         );
+
+        // Filter by gender preference (dating app logic)
+        if (currentUserInterest) {
+          validProfiles = validProfiles.filter((profile: any) => {
+            // If user is interested in "Women", only show Female profiles
+            if (currentUserInterest === 'Women') {
+              return profile.gender === 'Female';
+            }
+            // If user is interested in "Men", only show Male profiles
+            if (currentUserInterest === 'Men') {
+              return profile.gender === 'Male';
+            }
+            // Default: don't show profiles if preference not recognized
+            return false;
+          });
+          console.log(`🎯 Filtered by interest "${currentUserInterest}": ${validProfiles.length} profiles`);
+        }
         
         console.log(`✅ Loaded ${validProfiles.length} user profiles`);
         const profiles = validProfiles as UserProfile[];
@@ -185,6 +214,16 @@ export default function HomeScreen() {
                 commentCount={0}
                 onShare={handleShare}
                 onComment={handleComment}
+                onLike={(userId) => {
+                  // Remove liked user from the list
+                  setFilteredProfiles(prev => prev.filter(p => p.id !== userId));
+                  setUserProfiles(prev => prev.filter(p => p.id !== userId));
+                }}
+                onPass={(userId) => {
+                  // Remove passed user from the list
+                  setFilteredProfiles(prev => prev.filter(p => p.id !== userId));
+                  setUserProfiles(prev => prev.filter(p => p.id !== userId));
+                }}
               />
             );
           })}
