@@ -203,8 +203,8 @@ export default function HomeScreen() {
           showsVerticalScrollIndicator={false}
         >
           {filteredProfiles.map((profile) => {
-            const fullName = `${profile.first_name} ${profile.last_name}`;
-            const username = profile.first_name.toLowerCase() + profile.last_name.toLowerCase();
+            const fullName = profile.first_name;
+            const username = profile.first_name.toLowerCase();
             const mainPhoto = profile.photos && profile.photos.length > 0 ? profile.photos[0] : undefined;
             
             return (

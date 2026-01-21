@@ -744,17 +744,18 @@ export const recordProfileView = async (viewedUserId: string) => {
         ignoreDuplicates: true
       })
       .select()
-      .single();
+      .maybeSingle();
 
     if (error) {
-      // Ignore duplicate errors (already viewed)
-      if (error.code === '23505') {
+      // Ignore duplicate errors (already viewed) and PGRST116 (no rows returned when duplicate ignored)
+      if (error.code === '23505' || error.code === 'PGRST116') {
         return { data: null, error: null };
       }
       console.error('❌ Error recording profile view:', error);
       return { data: null, error };
     }
 
+    // If data is null (duplicate was ignored), that's fine - return success
     return { data, error: null };
   } catch (error: any) {
     console.error('❌ Exception in recordProfileView:', error);
