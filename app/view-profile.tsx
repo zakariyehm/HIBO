@@ -4,7 +4,7 @@
 
 import { Toast } from '@/components/Toast';
 import { Colors } from '@/constants/theme';
-import { getUserProfile, blockUser, getCurrentUser, isUserBlocked, recordProfileView } from '@/lib/supabase';
+import { blockUser, getCurrentUser, getUserProfile, isUserBlocked, recordProfileView } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -252,7 +252,7 @@ export default function ViewProfileScreen() {
         )}
 
         {/* Basic Information */}
-        <View style={styles.section}>
+        <View style={styles.basicInfoCard}>
           <Text style={styles.name}>{fullName || 'No name'}</Text>
           {profile.location && (
             <View style={styles.locationRow}>
@@ -268,75 +268,95 @@ export default function ViewProfileScreen() {
         {/* Bio */}
         {profile.bio && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>About</Text>
-            <Text style={styles.bio}>{profile.bio}</Text>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>About</Text>
+            </View>
+            <View style={styles.sectionContent}>
+              <Text style={styles.bio}>{profile.bio}</Text>
+            </View>
           </View>
         )}
 
         {/* Nationality */}
         {profile.nationality && profile.nationality.length > 0 && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Nationality</Text>
-            <Text style={styles.nationality}>
-              {profile.nationality.join(', ')}
-            </Text>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Nationality</Text>
+            </View>
+            <View style={styles.sectionContent}>
+              <Text style={styles.nationality}>
+                {profile.nationality.join(', ')}
+              </Text>
+            </View>
           </View>
         )}
 
         {/* Professional Details */}
         {(profile.profession || profile.education_level) && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Professional</Text>
-            {profile.profession && (
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Profession:</Text>
-                <Text style={styles.infoValue}>{profile.profession}</Text>
-              </View>
-            )}
-            {profile.education_level && (
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Education:</Text>
-                <Text style={styles.infoValue}>{profile.education_level}</Text>
-              </View>
-            )}
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Professional</Text>
+            </View>
+            <View style={styles.sectionContent}>
+              {profile.profession && (
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoLabel}>Profession:</Text>
+                  <Text style={styles.infoValue}>{profile.profession}</Text>
+                </View>
+              )}
+              {profile.education_level && (
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoLabel}>Education:</Text>
+                  <Text style={styles.infoValue}>{profile.education_level}</Text>
+                </View>
+              )}
+            </View>
           </View>
         )}
 
         {/* Personal Details */}
         {(profile.gender || profile.interested_in || profile.looking_for) && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Personal</Text>
-            {profile.gender && (
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Gender:</Text>
-                <Text style={styles.infoValue}>{profile.gender}</Text>
-              </View>
-            )}
-            {profile.interested_in && (
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Interested in:</Text>
-                <Text style={styles.infoValue}>{profile.interested_in}</Text>
-              </View>
-            )}
-            {profile.looking_for && (
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Looking for:</Text>
-                <Text style={styles.infoValue}>{profile.looking_for}</Text>
-              </View>
-            )}
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Personal</Text>
+            </View>
+            <View style={styles.sectionContent}>
+              {profile.gender && (
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoLabel}>Gender:</Text>
+                  <Text style={styles.infoValue}>{profile.gender}</Text>
+                </View>
+              )}
+              {profile.interested_in && (
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoLabel}>Interested in:</Text>
+                  <Text style={styles.infoValue}>{profile.interested_in}</Text>
+                </View>
+              )}
+              {profile.looking_for && (
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoLabel}>Looking for:</Text>
+                  <Text style={styles.infoValue}>{profile.looking_for}</Text>
+                </View>
+              )}
+            </View>
           </View>
         )}
 
         {/* Interests */}
         {profile.interests && profile.interests.length > 0 && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Interests</Text>
-            <View style={styles.interestsContainer}>
-              {profile.interests.map((interest, index) => (
-                <View key={index} style={styles.interestTag}>
-                  <Text style={styles.interestText}>{interest}</Text>
-                </View>
-              ))}
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Interests</Text>
+            </View>
+            <View style={styles.sectionContent}>
+              <View style={styles.interestsContainer}>
+                {profile.interests.map((interest, index) => (
+                  <View key={index} style={styles.interestTag}>
+                    <Text style={styles.interestText}>{interest}</Text>
+                  </View>
+                ))}
+              </View>
             </View>
           </View>
         )}
@@ -344,13 +364,17 @@ export default function ViewProfileScreen() {
         {/* Personality */}
         {profile.personality && profile.personality.length > 0 && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Personality</Text>
-            <View style={styles.interestsContainer}>
-              {profile.personality.map((trait, index) => (
-                <View key={index} style={styles.interestTag}>
-                  <Text style={styles.interestText}>{trait}</Text>
-                </View>
-              ))}
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Personality</Text>
+            </View>
+            <View style={styles.sectionContent}>
+              <View style={styles.interestsContainer}>
+                {profile.personality.map((trait, index) => (
+                  <View key={index} style={styles.interestTag}>
+                    <Text style={styles.interestText}>{trait}</Text>
+                  </View>
+                ))}
+              </View>
             </View>
           </View>
         )}
@@ -366,6 +390,13 @@ export default function ViewProfileScreen() {
   );
 }
 
+// Color palette matching the design
+const purple = '#D4C5F9'; // Light purple for section headers
+const pink = '#FFB6C1'; // Light pink for accents
+const darkPurple = '#8B6FBF'; // Dark purple text
+const white = '#FFFFFF';
+const lightGray = '#F5F5F5';
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -377,6 +408,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingVertical: 12,
+    backgroundColor: white,
     borderBottomWidth: 1,
     borderBottomColor: Colors.borderLight,
   },
@@ -422,7 +454,7 @@ const styles = StyleSheet.create({
     paddingBottom: 32,
   },
   photosSection: {
-    marginBottom: 29,
+    marginBottom: 24,
     position: 'relative',
   },
   photosScrollView: {
@@ -443,25 +475,36 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   photoCounterText: {
-    color: '#FFFFFF',
+    color: white,
     fontSize: 12,
     fontWeight: '600',
   },
-  section: {
-    paddingHorizontal: 16,
-    marginBottom: 29,
+  // Basic info section with rounded card
+  basicInfoCard: {
+    backgroundColor: white,
+    marginHorizontal: 16,
+    marginBottom: 20,
+    padding: 20,
+    borderRadius: 0,
+    borderWidth: 1,
+    borderColor: '#000',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
   },
   name: {
     fontSize: 28,
     fontWeight: 'bold',
     color: Colors.textDark,
-    marginBottom: 13,
+    marginBottom: 12,
   },
   locationRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    marginBottom: 9,
+    marginBottom: 8,
   },
   location: {
     fontSize: 16,
@@ -471,25 +514,56 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: Colors.textLight,
   },
+  // Section with purple header
+  section: {
+    marginBottom: 20,
+    marginHorizontal: 16,
+  },
+  sectionHeader: {
+    backgroundColor: purple,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderTopLeftRadius: 0,
+    borderTopRightRadius: 0,
+    borderWidth: 1,
+    borderColor: '#000',
+    borderBottomWidth: 0,
+    marginBottom: 0,
+  },
   sectionTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: Colors.textDark,
-    marginBottom: 17,
+    fontSize: 16,
+    fontWeight: '700',
+    color: white,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  sectionContent: {
+    backgroundColor: white,
+    padding: 16,
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
+    borderWidth: 1,
+    borderColor: '#000',
+    borderTopWidth: 0,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
   },
   bio: {
     fontSize: 16,
-    color: Colors.textDark,
+    color: darkPurple,
     lineHeight: 24,
   },
   nationality: {
     fontSize: 16,
-    color: Colors.textDark,
+    color: darkPurple,
     fontWeight: '500',
   },
   infoRow: {
     flexDirection: 'row',
-    marginBottom: 13,
+    marginBottom: 12,
     gap: 8,
   },
   infoLabel: {
@@ -500,8 +574,9 @@ const styles = StyleSheet.create({
   },
   infoValue: {
     fontSize: 16,
-    color: Colors.textDark,
+    color: darkPurple,
     flex: 1,
+    fontWeight: '500',
   },
   interestsContainer: {
     flexDirection: 'row',
@@ -509,16 +584,17 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   interestTag: {
-    backgroundColor: Colors.cardBackground,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
+    backgroundColor: lightGray,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 0,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: '#000',
   },
   interestText: {
     fontSize: 14,
-    color: Colors.textDark,
+    color: darkPurple,
+    fontWeight: '500',
   },
 });
 

@@ -2,9 +2,9 @@ import { AppHeader } from '@/components/app-header';
 import { PostCard } from '@/components/post-card';
 import { Colors } from '@/constants/theme';
 import { getAllUserProfiles, getCurrentUser, getUserProfile } from '@/lib/supabase';
+import { useFocusEffect } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, ScrollView, StatusBar, StyleSheet, Text, View } from 'react-native';
-import { useFocusEffect } from 'expo-router';
 
 interface UserProfile {
   id: string;
@@ -21,10 +21,8 @@ interface UserProfile {
 
 export default function HomeScreen() {
   const [userProfiles, setUserProfiles] = useState<UserProfile[]>([]);
-  const [filteredProfiles, setFilteredProfiles] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
-  const [searchText, setSearchText] = useState('');
 
   useEffect(() => {
     fetchUserProfiles();
@@ -96,11 +94,9 @@ export default function HomeScreen() {
         console.log(`✅ Loaded ${validProfiles.length} user profiles`);
         const profiles = validProfiles as UserProfile[];
         setUserProfiles(profiles);
-        setFilteredProfiles(profiles); // Initialize filtered profiles
       } else {
         console.log('⚠️  No user profiles found');
         setUserProfiles([]);
-        setFilteredProfiles([]);
       }
       
       setLoading(false);
@@ -126,35 +122,6 @@ export default function HomeScreen() {
     console.log('Invite pressed');
   };
 
-  const handleSearch = (text: string) => {
-    setSearchText(text);
-    
-    if (!text.trim()) {
-      // If search is empty, show all profiles
-      setFilteredProfiles(userProfiles);
-      return;
-    }
-    
-    // Filter profiles by name, location, or bio
-    const searchLower = text.toLowerCase().trim();
-    const filtered = userProfiles.filter((profile) => {
-      const fullName = `${profile.first_name} ${profile.last_name}`.toLowerCase();
-      const location = profile.location?.toLowerCase() || '';
-      const bio = profile.bio?.toLowerCase() || '';
-      const nationality = profile.nationality?.join(' ').toLowerCase() || '';
-      
-      return (
-        fullName.includes(searchLower) ||
-        location.includes(searchLower) ||
-        bio.includes(searchLower) ||
-        nationality.includes(searchLower)
-      );
-    });
-    
-    console.log(`🔍 Search "${text}": Found ${filtered.length} profiles`);
-    setFilteredProfiles(filtered);
-  };
-
   // Calculate time ago
   const getTimeAgo = (dateString: string) => {
     const date = new Date(dateString);
@@ -175,7 +142,6 @@ export default function HomeScreen() {
         onNotificationPress={handleNotification}
         onSharePress={handleShare}
         onInvitePress={handleInvite}
-        onSearch={handleSearch}
         showNotificationDot={true}
         showShareDot={true}
       />
@@ -185,15 +151,11 @@ export default function HomeScreen() {
           <ActivityIndicator size="large" color={Colors.primary} />
           <Text style={styles.loadingText}>Loading profiles...</Text>
         </View>
-      ) : filteredProfiles.length === 0 ? (
+      ) : userProfiles.length === 0 ? (
         <View style={styles.emptyContainer}>
-          <Text style={styles.emptyText}>
-            {searchText ? 'No profiles found' : 'No profiles found'}
-          </Text>
+          <Text style={styles.emptyText}>No profiles found</Text>
           <Text style={styles.emptySubtext}>
-            {searchText 
-              ? `No results for "${searchText}"` 
-              : 'Check back later for new users!'}
+            Check back later for new users!
           </Text>
         </View>
       ) : (
@@ -202,7 +164,7 @@ export default function HomeScreen() {
           contentContainerStyle={styles.contentContainer}
           showsVerticalScrollIndicator={false}
         >
-          {filteredProfiles.map((profile) => {
+          {userProfiles.map((profile) => {
             const fullName = profile.first_name;
             const username = profile.first_name.toLowerCase();
             const mainPhoto = profile.photos && profile.photos.length > 0 ? profile.photos[0] : undefined;
@@ -224,17 +186,14 @@ export default function HomeScreen() {
                 onComment={handleComment}
                 onLike={(userId) => {
                   // Remove liked user from the list
-                  setFilteredProfiles(prev => prev.filter(p => p.id !== userId));
                   setUserProfiles(prev => prev.filter(p => p.id !== userId));
                 }}
                 onPass={(userId) => {
                   // Remove passed user from the list
-                  setFilteredProfiles(prev => prev.filter(p => p.id !== userId));
                   setUserProfiles(prev => prev.filter(p => p.id !== userId));
                 }}
                 onBlock={(userId) => {
                   // Remove blocked user from the list
-                  setFilteredProfiles(prev => prev.filter(p => p.id !== userId));
                   setUserProfiles(prev => prev.filter(p => p.id !== userId));
                 }}
               />
