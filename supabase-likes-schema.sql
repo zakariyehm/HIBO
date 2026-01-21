@@ -63,9 +63,23 @@ ON matches FOR SELECT
 TO authenticated
 USING (auth.uid() = user1_id OR auth.uid() = user2_id);
 
+-- Allow trigger function to insert matches (for automatic match creation)
+-- This policy allows matches to be created when the trigger fires
+CREATE POLICY "Allow match creation via trigger"
+ON matches FOR INSERT
+TO authenticated
+WITH CHECK (
+  auth.uid() = user1_id OR auth.uid() = user2_id
+);
+
 -- Function to create match when both users like each other
+-- SECURITY DEFINER allows the function to run with the privileges of the function creator
+-- This is needed because the trigger needs to insert into matches table
 CREATE OR REPLACE FUNCTION create_match()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER 
+SECURITY DEFINER
+SET search_path = public
+AS $$
 BEGIN
   -- Check if the liked user has also liked back
   IF EXISTS (

@@ -211,12 +211,27 @@ export const getUserProfile = async (userId: string) => {
   return { data, error };
 };
 
-// Get all user profiles (excluding current user)
+// Get all user profiles (excluding current user, blocked users, and viewed profiles)
 export const getAllUserProfiles = async (excludeUserId?: string) => {
   try {
     console.log('🔍 Fetching all user profiles...');
     if (excludeUserId) {
       console.log('🚫 Excluding user:', excludeUserId);
+    }
+    
+    // Get blocked users list
+    const { data: blockedUsers } = await getBlockedUsers();
+    const blockedIds = blockedUsers || [];
+    
+    // Get viewed profiles list (like Tinder - once viewed, don't show again)
+    const { data: viewedProfiles } = await getViewedProfiles();
+    const viewedIds = viewedProfiles || [];
+    
+    if (blockedIds.length > 0) {
+      console.log('🚫 Excluding blocked users:', blockedIds.length);
+    }
+    if (viewedIds.length > 0) {
+      console.log('👁️  Excluding viewed profiles:', viewedIds.length);
     }
     
     let query = supabase
@@ -244,11 +259,16 @@ export const getAllUserProfiles = async (excludeUserId?: string) => {
       return { data: null, error };
     }
     
-    console.log(`✅ Fetched ${data?.length || 0} user profiles`);
-    if (data && data.length > 0) {
-      console.log('📋 Profile IDs:', data.map((p: any) => p.id));
+    // Filter out blocked users and viewed profiles in JavaScript
+    const filteredData = (data || []).filter(profile => 
+      !blockedIds.includes(profile.id) && !viewedIds.includes(profile.id)
+    );
+    
+    console.log(`✅ Fetched ${filteredData.length} user profiles (after filtering blocked and viewed users)`);
+    if (filteredData.length > 0) {
+      console.log('📋 Profile IDs:', filteredData.map((p: any) => p.id));
     }
-    return { data, error: null };
+    return { data: filteredData, error: null };
   } catch (error: any) {
     console.error('❌ Exception fetching profiles:', error);
     return { data: null, error };
@@ -341,7 +361,7 @@ export const uploadDocument = async (userId: string, documentUri: string, docume
   return uploadImage(userId, documentUri, documentName, 'documents');
 };
 
-// Likes and Matches functions
+// Likes and Matches functions - OPTIMIZED FOR SPEED (Tinder-like)
 export const likeUser = async (likedUserId: string) => {
   try {
     const { data: { session } } = await supabase.auth.getSession();
@@ -351,53 +371,36 @@ export const likeUser = async (likedUserId: string) => {
 
     const likerId = session.user.id;
 
-    // Check if already liked/passed
-    const { data: existingLike } = await supabase
+    // Use upsert for faster operation (no need to check first)
+    const { data, error } = await supabase
       .from('likes')
-      .select('*')
-      .eq('liker_id', likerId)
-      .eq('liked_id', likedUserId)
+      .upsert({
+        liker_id: likerId,
+        liked_id: likedUserId,
+        action: 'like',
+        created_at: new Date().toISOString(),
+      }, {
+        onConflict: 'liker_id,liked_id'
+      })
+      .select()
       .single();
 
-    if (existingLike) {
-      // Update existing like/pass to like
-      const { data, error } = await supabase
-        .from('likes')
-        .update({ action: 'like', created_at: new Date().toISOString() })
-        .eq('liker_id', likerId)
-        .eq('liked_id', likedUserId)
-        .select()
-        .single();
-
-      if (error) {
-        console.error('❌ Error updating like:', error);
-        return { data: null, error };
-      }
-
-      // Check for match
-      const matchResult = await checkForMatch(likerId, likedUserId);
-      return { data: { like: data, match: matchResult.data }, error: null };
-    } else {
-      // Create new like
-      const { data, error } = await supabase
-        .from('likes')
-        .insert({
-          liker_id: likerId,
-          liked_id: likedUserId,
-          action: 'like',
-        })
-        .select()
-        .single();
-
-      if (error) {
-        console.error('❌ Error creating like:', error);
-        return { data: null, error };
-      }
-
-      // Check for match
-      const matchResult = await checkForMatch(likerId, likedUserId);
-      return { data: { like: data, match: matchResult.data }, error: null };
+    if (error) {
+      console.error('❌ Error liking user:', error);
+      return { data: null, error };
     }
+
+    // Check for match in background (don't wait)
+    checkForMatch(likerId, likedUserId).then(matchResult => {
+      if (matchResult.data) {
+        console.log('🎉 Match found!', matchResult.data);
+        // Match will be handled by trigger/event system
+      }
+    }).catch(err => {
+      console.error('❌ Error checking match:', err);
+    });
+
+    return { data: { like: data, match: null }, error: null };
   } catch (error: any) {
     console.error('❌ Exception in likeUser:', error);
     return { data: null, error };
@@ -413,49 +416,26 @@ export const passUser = async (passedUserId: string) => {
 
     const likerId = session.user.id;
 
-    // Check if already liked/passed
-    const { data: existingLike } = await supabase
+    // Use upsert for faster operation (no need to check first)
+    const { data, error } = await supabase
       .from('likes')
-      .select('*')
-      .eq('liker_id', likerId)
-      .eq('liked_id', passedUserId)
+      .upsert({
+        liker_id: likerId,
+        liked_id: passedUserId,
+        action: 'pass',
+        created_at: new Date().toISOString(),
+      }, {
+        onConflict: 'liker_id,liked_id'
+      })
+      .select()
       .single();
 
-    if (existingLike) {
-      // Update existing like/pass to pass
-      const { data, error } = await supabase
-        .from('likes')
-        .update({ action: 'pass', created_at: new Date().toISOString() })
-        .eq('liker_id', likerId)
-        .eq('liked_id', passedUserId)
-        .select()
-        .single();
-
-      if (error) {
-        console.error('❌ Error updating pass:', error);
-        return { data: null, error };
-      }
-
-      return { data, error: null };
-    } else {
-      // Create new pass
-      const { data, error } = await supabase
-        .from('likes')
-        .insert({
-          liker_id: likerId,
-          liked_id: passedUserId,
-          action: 'pass',
-        })
-        .select()
-        .single();
-
-      if (error) {
-        console.error('❌ Error creating pass:', error);
-        return { data: null, error };
-      }
-
-      return { data, error: null };
+    if (error) {
+      console.error('❌ Error passing user:', error);
+      return { data: null, error };
     }
+
+    return { data, error: null };
   } catch (error: any) {
     console.error('❌ Exception in passUser:', error);
     return { data: null, error };
@@ -464,6 +444,8 @@ export const passUser = async (passedUserId: string) => {
 
 export const checkForMatch = async (userId1: string, userId2: string) => {
   try {
+    console.log('🔍 Checking for match between:', userId1, 'and', userId2);
+    
     // Check if user2 has also liked user1
     const { data: mutualLike, error } = await supabase
       .from('likes')
@@ -471,25 +453,41 @@ export const checkForMatch = async (userId1: string, userId2: string) => {
       .eq('liker_id', userId2)
       .eq('liked_id', userId1)
       .eq('action', 'like')
-      .single();
+      .maybeSingle(); // Use maybeSingle instead of single to avoid errors
 
-    if (error || !mutualLike) {
+    if (error) {
+      console.error('❌ Error checking mutual like:', error);
+      return { data: null, error: null };
+    }
+
+    if (!mutualLike) {
+      console.log('❌ No mutual like found (no match)');
       return { data: null, error: null }; // No match
     }
 
-    // Match found! Get match record
+    console.log('✅ Mutual like found! Checking match record...');
+
+    // Match found! Try to get match record (might not exist yet if trigger hasn't fired)
     const { data: match, error: matchError } = await supabase
       .from('matches')
       .select('*')
       .or(`and(user1_id.eq.${userId1},user2_id.eq.${userId2}),and(user1_id.eq.${userId2},user2_id.eq.${userId1})`)
-      .single();
+      .maybeSingle();
 
-    if (matchError && matchError.code !== 'PGRST116') {
-      console.error('❌ Error checking match:', matchError);
-      return { data: null, error: matchError };
+    if (matchError) {
+      console.error('❌ Error checking match record:', matchError);
+      // Still return success if mutual like exists (match will be created by trigger)
+      return { data: { id: 'pending', user1_id: userId1, user2_id: userId2 }, error: null };
     }
 
-    return { data: match, error: null };
+    if (match) {
+      console.log('✅ Match record found:', match.id);
+      return { data: match, error: null };
+    }
+
+    // Match exists (mutual like) but record not created yet - trigger will create it
+    console.log('✅ Mutual like confirmed (match record pending)');
+    return { data: { id: 'pending', user1_id: userId1, user2_id: userId2 }, error: null };
   } catch (error: any) {
     console.error('❌ Exception in checkForMatch:', error);
     return { data: null, error };
@@ -505,6 +503,10 @@ export const getUserMatches = async () => {
 
     const userId = session.user.id;
 
+    // Get blocked users list
+    const { data: blockedUsers } = await getBlockedUsers();
+    const blockedIds = blockedUsers || [];
+
     // Get all matches for this user
     const { data, error } = await supabase
       .from('matches')
@@ -517,10 +519,16 @@ export const getUserMatches = async () => {
       return { data: null, error };
     }
 
-    // Get match partner profiles
+    // Get match partner profiles and filter out blocked users
     const matchProfiles = await Promise.all(
       (data || []).map(async (match) => {
         const partnerId = match.user1_id === userId ? match.user2_id : match.user1_id;
+        
+        // Skip if partner is blocked
+        if (blockedIds.includes(partnerId)) {
+          return null;
+        }
+        
         const { data: profile } = await getUserProfile(partnerId);
         return {
           match,
@@ -529,7 +537,10 @@ export const getUserMatches = async () => {
       })
     );
 
-    return { data: matchProfiles, error: null };
+    // Filter out null entries (blocked users)
+    const filteredMatches = matchProfiles.filter(m => m !== null);
+
+    return { data: filteredMatches, error: null };
   } catch (error: any) {
     console.error('❌ Exception in getUserMatches:', error);
     return { data: null, error };
@@ -568,6 +579,212 @@ export const getUserLikes = async () => {
     return { data: likedProfiles.filter(Boolean), error: null };
   } catch (error: any) {
     console.error('❌ Exception in getUserLikes:', error);
+    return { data: null, error };
+  }
+};
+
+// Block and Unblock functions
+export const blockUser = async (blockedUserId: string) => {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) {
+      return { data: null, error: { message: 'Not authenticated' } };
+    }
+
+    const blockerId = session.user.id;
+
+    // Prevent self-blocking
+    if (blockerId === blockedUserId) {
+      return { data: null, error: { message: 'Cannot block yourself' } };
+    }
+
+    // Check if already blocked
+    const { data: existingBlock } = await supabase
+      .from('blocks')
+      .select('*')
+      .eq('blocker_id', blockerId)
+      .eq('blocked_id', blockedUserId)
+      .single();
+
+    if (existingBlock) {
+      console.log('⚠️  User already blocked');
+      return { data: existingBlock, error: null };
+    }
+
+    // Create new block
+    const { data, error } = await supabase
+      .from('blocks')
+      .insert({
+        blocker_id: blockerId,
+        blocked_id: blockedUserId,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error('❌ Error blocking user:', error);
+      return { data: null, error };
+    }
+
+    console.log('✅ User blocked successfully');
+    return { data, error: null };
+  } catch (error: any) {
+    console.error('❌ Exception in blockUser:', error);
+    return { data: null, error };
+  }
+};
+
+export const unblockUser = async (blockedUserId: string) => {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) {
+      return { data: null, error: { message: 'Not authenticated' } };
+    }
+
+    const blockerId = session.user.id;
+
+    const { error } = await supabase
+      .from('blocks')
+      .delete()
+      .eq('blocker_id', blockerId)
+      .eq('blocked_id', blockedUserId);
+
+    if (error) {
+      console.error('❌ Error unblocking user:', error);
+      return { data: null, error };
+    }
+
+    console.log('✅ User unblocked successfully');
+    return { data: { success: true }, error: null };
+  } catch (error: any) {
+    console.error('❌ Exception in unblockUser:', error);
+    return { data: null, error };
+  }
+};
+
+export const getBlockedUsers = async () => {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) {
+      return { data: null, error: { message: 'Not authenticated' } };
+    }
+
+    const userId = session.user.id;
+
+    const { data, error } = await supabase
+      .from('blocks')
+      .select('blocked_id')
+      .eq('blocker_id', userId);
+
+    if (error) {
+      console.error('❌ Error fetching blocked users:', error);
+      return { data: null, error };
+    }
+
+    const blockedIds = (data || []).map(block => block.blocked_id);
+    return { data: blockedIds, error: null };
+  } catch (error: any) {
+    console.error('❌ Exception in getBlockedUsers:', error);
+    return { data: null, error };
+  }
+};
+
+export const isUserBlocked = async (userId: string) => {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) {
+      return { data: false, error: null };
+    }
+
+    const currentUserId = session.user.id;
+
+    const { data, error } = await supabase
+      .from('blocks')
+      .select('id')
+      .eq('blocker_id', currentUserId)
+      .eq('blocked_id', userId)
+      .maybeSingle();
+
+    if (error) {
+      console.error('❌ Error checking if user is blocked:', error);
+      return { data: false, error: null };
+    }
+
+    return { data: !!data, error: null };
+  } catch (error: any) {
+    console.error('❌ Exception in isUserBlocked:', error);
+    return { data: false, error: null };
+  }
+};
+
+// Profile Views functions (like Tinder - once viewed, don't show again) - OPTIMIZED
+export const recordProfileView = async (viewedUserId: string) => {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) {
+      return { data: null, error: { message: 'Not authenticated' } };
+    }
+
+    const viewerId = session.user.id;
+
+    // Prevent self-viewing
+    if (viewerId === viewedUserId) {
+      return { data: null, error: { message: 'Cannot view own profile' } };
+    }
+
+    // Use upsert for faster operation (no need to check first)
+    const { data, error } = await supabase
+      .from('profile_views')
+      .upsert({
+        viewer_id: viewerId,
+        viewed_id: viewedUserId,
+        created_at: new Date().toISOString(),
+      }, {
+        onConflict: 'viewer_id,viewed_id',
+        ignoreDuplicates: true
+      })
+      .select()
+      .single();
+
+    if (error) {
+      // Ignore duplicate errors (already viewed)
+      if (error.code === '23505') {
+        return { data: null, error: null };
+      }
+      console.error('❌ Error recording profile view:', error);
+      return { data: null, error };
+    }
+
+    return { data, error: null };
+  } catch (error: any) {
+    console.error('❌ Exception in recordProfileView:', error);
+    return { data: null, error };
+  }
+};
+
+export const getViewedProfiles = async () => {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) {
+      return { data: null, error: { message: 'Not authenticated' } };
+    }
+
+    const userId = session.user.id;
+
+    const { data, error } = await supabase
+      .from('profile_views')
+      .select('viewed_id')
+      .eq('viewer_id', userId);
+
+    if (error) {
+      console.error('❌ Error fetching viewed profiles:', error);
+      return { data: null, error };
+    }
+
+    const viewedIds = (data || []).map(view => view.viewed_id);
+    return { data: viewedIds, error: null };
+  } catch (error: any) {
+    console.error('❌ Exception in getViewedProfiles:', error);
     return { data: null, error };
   }
 };

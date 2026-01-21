@@ -1,9 +1,10 @@
+import { MatchPopup } from '@/components/MatchPopup';
 import { Colors } from '@/constants/theme';
-import { likeUser, passUser } from '@/lib/supabase';
+import { blockUser, checkForMatch, likeUser, passUser, recordProfileView, supabase } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useState } from 'react';
-import { ActivityIndicator, Alert, Dimensions, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Dimensions, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -24,6 +25,7 @@ interface PostCardProps {
   onComment?: () => void;
   onLike?: (userId: string) => void; // Callback when user is liked
   onPass?: (userId: string) => void; // Callback when user is passed
+  onBlock?: (userId: string) => void; // Callback when user is blocked
 }
 
 export function PostCard({
@@ -43,11 +45,12 @@ export function PostCard({
   onComment,
   onLike,
   onPass,
+  onBlock,
 }: PostCardProps) {
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [showMenu, setShowMenu] = useState(false);
-  const [liking, setLiking] = useState(false);
-  const [passing, setPassing] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false); // Single state for both actions
+  const [showMatchPopup, setShowMatchPopup] = useState(false);
   
   // Use photos array if provided, otherwise fallback to postImage
   const imageArray = photos && photos.length > 0 ? photos : (postImage ? [postImage] : []);
@@ -60,71 +63,62 @@ export function PostCard({
   };
 
   const handleLike = async () => {
-    if (!userId || liking || passing) return;
+    if (!userId || isProcessing) return;
+    setIsProcessing(true);
 
-    try {
-      setLiking(true);
-      const { data, error } = await likeUser(userId);
+    // OPTIMISTIC UPDATE - Remove card immediately (like Tinder - instant!)
+    if (onLike) {
+      onLike(userId);
+    }
 
-      if (error) {
-        console.error('❌ Error liking user:', error);
-        Alert.alert('Error', 'Failed to like user. Please try again.');
-        setLiking(false);
+    // Run operations in background (don't wait)
+    Promise.all([
+      likeUser(userId),
+      recordProfileView(userId)
+    ]).then(([likeResult]) => {
+      if (likeResult.error) {
+        console.error('❌ Error liking user:', likeResult.error);
         return;
       }
 
-      // Check if it's a match!
-      if (data?.match) {
-        Alert.alert(
-          '🎉 It\'s a Match!',
-          `You and ${profileName} liked each other!`,
-          [
-            { text: 'View Match', onPress: () => router.push('/(tabs)/match') },
-            { text: 'OK', style: 'default' },
-          ]
-        );
-      } else {
-        Alert.alert('✅ Liked!', `You liked ${profileName}`);
-      }
-
-      // Call parent's onLike callback if provided
-      if (onLike) {
-        onLike(userId);
-      }
-
-      setLiking(false);
-    } catch (error) {
+      // Check for match in background (don't block UI)
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        if (session?.user && userId) {
+          checkForMatch(session.user.id, userId).then((matchResult: any) => {
+            if (matchResult.data) {
+              console.log('🎉 MATCH FOUND!');
+              setShowMatchPopup(true);
+            }
+          }).catch((err: any) => {
+            console.error('❌ Error checking match:', err);
+          });
+        }
+      });
+    }).catch((error) => {
       console.error('❌ Exception in handleLike:', error);
-      Alert.alert('Error', 'An unexpected error occurred.');
-      setLiking(false);
-    }
+    }).finally(() => {
+      setIsProcessing(false);
+    });
   };
 
   const handlePass = async () => {
-    if (!userId || liking || passing) return;
+    if (!userId || isProcessing) return;
+    setIsProcessing(true);
 
-    try {
-      setPassing(true);
-      const { data, error } = await passUser(userId);
-
-      if (error) {
-        console.error('❌ Error passing user:', error);
-        Alert.alert('Error', 'Failed to pass user. Please try again.');
-        setPassing(false);
-        return;
-      }
-
-      // Call parent's onPass callback if provided
-      if (onPass) {
-        onPass(userId);
-      }
-
-      setPassing(false);
-    } catch (error) {
-      console.error('❌ Exception in handlePass:', error);
-      Alert.alert('Error', 'An unexpected error occurred.');
-      setPassing(false);
+    // OPTIMISTIC UPDATE - Remove card immediately (like Tinder - instant!)
+    if (onPass) {
+      onPass(userId);
     }
+
+    // Run operations in background (don't wait)
+    Promise.all([
+      passUser(userId),
+      recordProfileView(userId)
+    ]).catch((error) => {
+      console.error('❌ Exception in handlePass:', error);
+    }).finally(() => {
+      setIsProcessing(false);
+    });
   };
 
   return (
@@ -198,7 +192,38 @@ export function PostCard({
                 style={styles.menuItem}
                 onPress={() => {
                   setShowMenu(false);
-                  // Add block action here
+                  if (userId) {
+                    Alert.alert(
+                      'Block User',
+                      `Are you sure you want to block ${profileName}? You will no longer see them in your feed or matches.`,
+                      [
+                        {
+                          text: 'Cancel',
+                          style: 'cancel',
+                        },
+                        {
+                          text: 'Block',
+                          style: 'destructive',
+                          onPress: async () => {
+                            try {
+                              const { error } = await blockUser(userId);
+                              if (error) {
+                                Alert.alert('Error', 'Failed to block user. Please try again.');
+                                return;
+                              }
+                              // Call the callback to remove from list
+                              if (onBlock) {
+                                onBlock(userId);
+                              }
+                              Alert.alert('Success', 'User blocked successfully');
+                            } catch (error) {
+                              Alert.alert('Error', 'An error occurred. Please try again.');
+                            }
+                          },
+                        },
+                      ]
+                    );
+                  }
                 }}
               >
                 <Ionicons name="ban-outline" size={16} color={Colors.red} />
@@ -257,32 +282,20 @@ export function PostCard({
         {/* Action Buttons - Like & Pass */}
         <View style={styles.actionButtons}>
           <TouchableOpacity 
-            style={[styles.actionButton, styles.likeButton, (liking || passing) && styles.actionButtonDisabled]}
+            style={[styles.actionButton, styles.likeButton, isProcessing && styles.actionButtonDisabled]}
             onPress={handleLike}
-            disabled={liking || passing || !userId}
+            disabled={isProcessing || !userId}
           >
-            {liking ? (
-              <ActivityIndicator size="small" color={Colors.green} />
-            ) : (
-              <>
-                <Ionicons name="heart" size={14} color={Colors.green} />
-                <Text style={[styles.actionButtonText, styles.likeButtonText]}>Like</Text>
-              </>
-            )}
+            <Ionicons name="heart" size={14} color={Colors.green} />
+            <Text style={[styles.actionButtonText, styles.likeButtonText]}>Like</Text>
           </TouchableOpacity>
           <TouchableOpacity 
-            style={[styles.actionButton, styles.passButton, (liking || passing) && styles.actionButtonDisabled]}
+            style={[styles.actionButton, styles.passButton, isProcessing && styles.actionButtonDisabled]}
             onPress={handlePass}
-            disabled={liking || passing || !userId}
+            disabled={isProcessing || !userId}
           >
-            {passing ? (
-              <ActivityIndicator size="small" color={Colors.red} />
-            ) : (
-              <>
-                <Ionicons name="close" size={14} color={Colors.red} />
-                <Text style={[styles.actionButtonText, styles.passButtonText]}>Pass</Text>
-              </>
-            )}
+            <Ionicons name="close" size={14} color={Colors.red} />
+            <Text style={[styles.actionButtonText, styles.passButtonText]}>Pass</Text>
           </TouchableOpacity>
         </View>
 
@@ -307,6 +320,30 @@ export function PostCard({
         </View>
 
       </View>
+
+      {/* Match Popup */}
+      <MatchPopup
+        visible={showMatchPopup}
+        matchedUserName={profileName}
+        matchedUserPhoto={imageArray.length > 0 ? imageArray[0] : undefined}
+        onClose={() => {
+          console.log('🚪 Closing match popup - removing card');
+          setShowMatchPopup(false);
+          // Remove card after popup closes
+          if (onLike && userId) {
+            onLike(userId);
+          }
+        }}
+        onViewMatch={() => {
+          console.log('👀 View match pressed - removing card');
+          setShowMatchPopup(false);
+          // Remove card after navigating
+          if (onLike && userId) {
+            onLike(userId);
+          }
+          router.push('/(tabs)/match');
+        }}
+      />
     </View>
   );
 }

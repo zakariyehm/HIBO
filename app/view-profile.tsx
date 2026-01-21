@@ -4,13 +4,14 @@
 
 import { Toast } from '@/components/Toast';
 import { Colors } from '@/constants/theme';
-import { getUserProfile } from '@/lib/supabase';
+import { getUserProfile, blockUser, getCurrentUser, isUserBlocked, recordProfileView } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Dimensions,
   Image,
   ScrollView,
@@ -58,6 +59,8 @@ export default function ViewProfileScreen() {
   const [toastVisible, setToastVisible] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
   const [toastType, setToastType] = useState<'info' | 'error' | 'success'>('info');
+  const [isBlocked, setIsBlocked] = useState(false);
+  const [isCurrentUser, setIsCurrentUser] = useState(false);
 
   const showToast = (message: string, type: 'info' | 'error' | 'success' = 'info') => {
     setToastMessage(message);
@@ -67,12 +70,29 @@ export default function ViewProfileScreen() {
 
   useEffect(() => {
     if (userId) {
+      checkIfCurrentUser();
+      checkIfBlocked();
       fetchProfile();
+      // Record that this profile was viewed (like Tinder - once viewed, don't show again)
+      recordProfileView(userId);
     } else {
       showToast('User ID not provided', 'error');
       setLoading(false);
     }
   }, [userId]);
+
+  const checkIfCurrentUser = async () => {
+    const { user } = await getCurrentUser();
+    if (user && user.id === userId) {
+      setIsCurrentUser(true);
+    }
+  };
+
+  const checkIfBlocked = async () => {
+    if (!userId) return;
+    const { data } = await isUserBlocked(userId);
+    setIsBlocked(data || false);
+  };
 
   const fetchProfile = async () => {
     if (!userId) return;
@@ -141,6 +161,42 @@ export default function ViewProfileScreen() {
     );
   }
 
+  const handleBlockUser = () => {
+    if (!userId) return;
+
+    Alert.alert(
+      'Block User',
+      `Are you sure you want to block ${profile?.first_name || 'this user'}? You will no longer see them in your feed or matches.`,
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Block',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const { error } = await blockUser(userId);
+              if (error) {
+                showToast('Failed to block user', 'error');
+                return;
+              }
+              showToast('User blocked successfully', 'success');
+              setIsBlocked(true);
+              // Navigate back after a short delay
+              setTimeout(() => {
+                router.back();
+              }, 1500);
+            } catch (error) {
+              showToast('An error occurred', 'error');
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const fullName = `${profile.first_name || ''} ${profile.last_name || ''}`.trim();
   const photos = profile.photos && profile.photos.length > 0 ? profile.photos : [];
 
@@ -154,7 +210,12 @@ export default function ViewProfileScreen() {
           <Ionicons name="arrow-back" size={24} color={Colors.textDark} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Profile</Text>
-        <View style={styles.placeholder} />
+        {!isCurrentUser && (
+          <TouchableOpacity onPress={handleBlockUser} style={styles.blockButton}>
+            <Ionicons name="ban-outline" size={20} color={Colors.red} />
+          </TouchableOpacity>
+        )}
+        {isCurrentUser && <View style={styles.placeholder} />}
       </View>
 
       <ScrollView
@@ -329,6 +390,9 @@ const styles = StyleSheet.create({
   },
   placeholder: {
     width: 32,
+  },
+  blockButton: {
+    padding: 4,
   },
   loadingContainer: {
     flex: 1,

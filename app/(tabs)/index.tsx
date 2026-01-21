@@ -4,6 +4,7 @@ import { Colors } from '@/constants/theme';
 import { getAllUserProfiles, getCurrentUser, getUserProfile } from '@/lib/supabase';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, ScrollView, StatusBar, StyleSheet, Text, View } from 'react-native';
+import { useFocusEffect } from 'expo-router';
 
 interface UserProfile {
   id: string;
@@ -28,6 +29,13 @@ export default function HomeScreen() {
   useEffect(() => {
     fetchUserProfiles();
   }, []);
+
+  // Refresh feed when screen comes into focus (e.g., after viewing a profile)
+  useFocusEffect(
+    React.useCallback(() => {
+      fetchUserProfiles();
+    }, [])
+  );
 
   const fetchUserProfiles = async () => {
     try {
@@ -221,6 +229,11 @@ export default function HomeScreen() {
                 }}
                 onPass={(userId) => {
                   // Remove passed user from the list
+                  setFilteredProfiles(prev => prev.filter(p => p.id !== userId));
+                  setUserProfiles(prev => prev.filter(p => p.id !== userId));
+                }}
+                onBlock={(userId) => {
+                  // Remove blocked user from the list
                   setFilteredProfiles(prev => prev.filter(p => p.id !== userId));
                   setUserProfiles(prev => prev.filter(p => p.id !== userId));
                 }}
