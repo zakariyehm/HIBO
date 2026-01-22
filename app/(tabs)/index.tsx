@@ -11,7 +11,8 @@ interface UserProfile {
   first_name: string;
   last_name: string;
   location: string;
-  bio: string;
+  bio?: string;
+  bio_title?: string;
   photos: string[];
   nationality?: string[];
   gender?: string;
@@ -114,14 +115,6 @@ export default function HomeScreen() {
     console.log('Comment pressed');
   };
 
-  const handleNotification = () => {
-    console.log('Notification pressed');
-  };
-
-  const handleInvite = () => {
-    console.log('Invite pressed');
-  };
-
   // Calculate time ago
   const getTimeAgo = (dateString: string) => {
     const date = new Date(dateString);
@@ -139,11 +132,12 @@ export default function HomeScreen() {
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" />
       <AppHeader
-        onNotificationPress={handleNotification}
-        onSharePress={handleShare}
-        onInvitePress={handleInvite}
-        showNotificationDot={true}
-        showShareDot={true}
+        title="For you"
+        onActionPress={() => {
+          // Handle action button press (e.g., create new post)
+          console.log('Action button pressed');
+        }}
+        actionIcon="add-outline"
       />
       
       {loading ? (
@@ -164,39 +158,43 @@ export default function HomeScreen() {
           contentContainerStyle={styles.contentContainer}
           showsVerticalScrollIndicator={false}
         >
-          {userProfiles.map((profile) => {
+          {userProfiles.map((profile, index) => {
             const fullName = profile.first_name;
             const username = profile.first_name.toLowerCase();
             const mainPhoto = profile.photos && profile.photos.length > 0 ? profile.photos[0] : undefined;
             
             return (
-              <PostCard
-                key={profile.id}
-                profileName={fullName}
-                location={profile.location}
-                username={username}
-                timeAgo={getTimeAgo(profile.created_at)}
-                profileImage={mainPhoto}
-                photos={profile.photos} // Pass all photos for swiper
-                postText={profile.bio}
-                nationality={profile.nationality} // Pass nationality
-                userId={profile.id} // Pass userId for profile navigation
-                commentCount={0}
-                onShare={handleShare}
-                onComment={handleComment}
-                onLike={(userId) => {
-                  // Remove liked user from the list
-                  setUserProfiles(prev => prev.filter(p => p.id !== userId));
-                }}
-                onPass={(userId) => {
-                  // Remove passed user from the list
-                  setUserProfiles(prev => prev.filter(p => p.id !== userId));
-                }}
-                onBlock={(userId) => {
-                  // Remove blocked user from the list
-                  setUserProfiles(prev => prev.filter(p => p.id !== userId));
-                }}
-              />
+              <React.Fragment key={profile.id}>
+                {index > 0 && <View style={styles.divider} />}
+                <PostCard
+                  profileName={fullName}
+                  location={profile.location}
+                  username={username}
+                  timeAgo={getTimeAgo(profile.created_at)}
+                  profileImage={mainPhoto}
+                  photos={profile.photos} // Pass all photos for swiper
+                  bio_title={profile.bio_title}
+                  bio={profile.bio}
+                  postText={profile.bio} // Legacy support
+                  nationality={profile.nationality} // Pass nationality
+                  userId={profile.id} // Pass userId for profile navigation
+                  commentCount={0}
+                  onShare={handleShare}
+                  onComment={handleComment}
+                  onLike={(userId) => {
+                    // Remove liked user from the list
+                    setUserProfiles(prev => prev.filter(p => p.id !== userId));
+                  }}
+                  onPass={(userId) => {
+                    // Remove passed user from the list
+                    setUserProfiles(prev => prev.filter(p => p.id !== userId));
+                  }}
+                  onBlock={(userId) => {
+                    // Remove blocked user from the list
+                    setUserProfiles(prev => prev.filter(p => p.id !== userId));
+                  }}
+                />
+              </React.Fragment>
             );
           })}
         </ScrollView>
@@ -244,5 +242,11 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: Colors.textLight,
     textAlign: 'center',
+  },
+  divider: {
+    height: 1,
+    backgroundColor: Colors.borderLight,
+    marginVertical: 16,
+    marginHorizontal: 0,
   },
 });

@@ -10,7 +10,7 @@ export const Colors = {
   text: '#11181C',
   textDark: '#000000',
   textLight: '#999999',
-  background: '#FFFBF8',
+  background: '#F6F6F6',
   cardBackground: '#FFFFFF',
   tint: tintColor,
   icon: '#687076',

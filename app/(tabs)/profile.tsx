@@ -5,7 +5,7 @@
 
 import { Toast } from '@/components/Toast';
 import { Colors } from '@/constants/theme';
-import { getUserProfile, signOut, supabase, uploadPhotos } from '@/lib/supabase';
+import { createPost, deletePost, getUserPosts, getUserProfile, Post, signOut, supabase, uploadPhotos } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
@@ -75,6 +75,7 @@ interface UserProfile {
   nationality_id_front?: string;
   nationality_id_back?: string;
   national_id_number?: string;
+  bio_title?: string;
   bio?: string;
   created_at?: string;
   updated_at?: string;
@@ -93,12 +94,48 @@ export default function ProfileScreen() {
   const [toastVisible, setToastVisible] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
   const [toastType, setToastType] = useState<'info' | 'error' | 'success'>('info');
+  const [posts, setPosts] = useState<Post[]>([]);
+  const [newPostTitle, setNewPostTitle] = useState('');
+  const [newPostImage, setNewPostImage] = useState<string | null>(null);
+  const [newPostDescription, setNewPostDescription] = useState('');
+  const [posting, setPosting] = useState(false);
 
   // Show toast notification
   const showToast = (message: string, type: 'info' | 'error' | 'success' = 'info') => {
     setToastMessage(message);
     setToastType(type);
     setToastVisible(true);
+  };
+
+  // Count emojis in a string
+  const countEmojis = (text: string): number => {
+    // Emoji regex pattern covering most common emoji ranges
+    const emojiRegex = /[\u{1F300}-\u{1F9FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]|[\u{1F600}-\u{1F64F}]|[\u{1F680}-\u{1F6FF}]|[\u{1F1E0}-\u{1F1FF}]|[\u{1F900}-\u{1F9FF}]|[\u{1FA00}-\u{1FAFF}]|[\u{FE00}-\u{FE0F}]/gu;
+    const matches = text.match(emojiRegex);
+    return matches ? matches.length : 0;
+  };
+
+  // Validate name input: max 10 characters and max 2 emojis
+  const validateNameInput = (newText: string, currentText: string): string => {
+    // Count emojis in new text
+    const emojiCount = countEmojis(newText);
+    
+    // If more than 2 emojis, reject the change
+    if (emojiCount > 2) {
+      showToast('Maximum 2 emojis allowed', 'error');
+      return currentText; // Return current value, don't update
+    }
+    
+    // Count total characters - each emoji and regular char counts as 1
+    // Use Array.from to properly handle Unicode characters
+    const totalLength = Array.from(newText).length;
+    
+    if (totalLength > 10) {
+      showToast('Maximum 10 characters allowed', 'error');
+      return currentText; // Return current value, don't update
+    }
+    
+    return newText;
   };
 
   // Request image permissions
@@ -213,6 +250,143 @@ export default function ProfileScreen() {
     }
   };
 
+  const handlePickPostImage = async () => {
+    try {
+      const hasPermission = await requestImagePermissions();
+      if (!hasPermission) return;
+
+      Alert.alert(
+        'Select Photo',
+        'Choose an option',
+        [
+          { text: 'Camera', onPress: () => pickPostImageFromCamera() },
+          { text: 'Gallery', onPress: () => pickPostImageFromGallery() },
+          { text: 'Cancel', style: 'cancel' },
+        ]
+      );
+    } catch (error) {
+      showToast('Failed to pick image', 'error');
+    }
+  };
+
+  const pickPostImageFromGallery = async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [3, 4],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        setNewPostImage(result.assets[0].uri);
+      }
+    } catch (error) {
+      showToast('Failed to pick image from gallery', 'error');
+    }
+  };
+
+  const pickPostImageFromCamera = async () => {
+    try {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== 'granted') {
+        showToast('We need access to your camera.', 'error');
+        return;
+      }
+
+      const result = await ImagePicker.launchCameraAsync({
+        allowsEditing: true,
+        aspect: [3, 4],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        setNewPostImage(result.assets[0].uri);
+      }
+    } catch (error) {
+      showToast('Failed to take photo', 'error');
+    }
+  };
+
+  const handleCreatePost = async () => {
+    // Validate: must have either image or description
+    if (!newPostImage && !newPostDescription.trim()) {
+      showToast('Please add text or an image', 'error');
+      return;
+    }
+
+    try {
+      setPosting(true);
+      const { data, error } = await createPost(
+        newPostTitle || undefined, 
+        newPostImage,
+        newPostDescription.trim() || undefined
+      );
+
+      if (error) {
+        console.error('❌ Error creating post:', error);
+        showToast('Failed to create post. Please try again.', 'error');
+        setPosting(false);
+        return;
+      }
+
+      if (data) {
+        console.log('✅ Post created:', data);
+        console.log('📸 Post image URL:', data.image_url);
+        
+        // Refetch posts to get the latest data with proper image URLs
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user) {
+          const { data: refreshedPosts } = await getUserPosts(session.user.id);
+          if (refreshedPosts) {
+            console.log('✅ Refreshed posts:', refreshedPosts.length);
+            refreshedPosts.forEach((post: any, index: number) => {
+              console.log(`  Post ${index + 1}:`, post.id, 'Image:', post.image_url);
+            });
+            setPosts(refreshedPosts);
+          } else {
+            // Fallback: add the new post to the list
+            console.log('⚠️  Using fallback - adding post directly');
+            setPosts([data, ...posts]);
+          }
+        }
+        setNewPostTitle('');
+        setNewPostImage(null);
+        setNewPostDescription('');
+        showToast('Post created successfully! 🎉', 'success');
+      }
+
+      setPosting(false);
+    } catch (error: any) {
+      console.error('❌ Exception in handleCreatePost:', error);
+      showToast(error.message || 'An error occurred.', 'error');
+      setPosting(false);
+    }
+  };
+
+  const handleDeletePost = async (postId: string) => {
+    Alert.alert(
+      'Delete Post',
+      'Are you sure you want to delete this post?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            const { error } = await deletePost(postId);
+            if (error) {
+              showToast('Failed to delete post', 'error');
+              return;
+            }
+            setPosts(posts.filter(p => p.id !== postId));
+            showToast('Post deleted successfully', 'success');
+          },
+        },
+      ]
+    );
+  };
+
   const handleSave = async () => {
     if (!editingProfile || !userProfile?.id) {
       showToast('No profile data to save', 'error');
@@ -308,6 +482,7 @@ export default function ProfileScreen() {
         marriage_know_time: editingProfile.marriage_know_time,
         marriage_married_time: editingProfile.marriage_married_time,
         interests: editingProfile.interests || [],
+        bio_title: editingProfile.bio_title,
         bio: editingProfile.bio,
         updated_at: new Date().toISOString(),
       };
@@ -329,12 +504,31 @@ export default function ProfileScreen() {
       
       console.log('✅ Profile updated successfully in database');
       
-      // Update local state
-      const updatedProfile = { ...editingProfile, photos: finalPhotoUrls };
-      setUserProfile(updatedProfile);
-      setEditingProfile(updatedProfile);
+      // Refetch profile from database to get latest data including bio_title
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user) {
+        const { data: refreshedProfile } = await getUserProfile(session.user.id);
+        if (refreshedProfile) {
+          // Filter out placeholder photos
+          if (refreshedProfile.photos && refreshedProfile.photos.length > 0) {
+            const validPhotos = refreshedProfile.photos.filter((photo: string) => 
+              photo && 
+              !photo.includes('placeholder') && 
+              (photo.startsWith('http') || photo.startsWith('https'))
+            );
+            if (validPhotos.length > 0) {
+              refreshedProfile.photos = validPhotos;
+            } else {
+              refreshedProfile.photos = [];
+            }
+          }
+          setUserProfile(refreshedProfile);
+          setEditingProfile(refreshedProfile);
+        }
+      }
+      
       setNewPhotos([]); // Clear new photos list
-    setActiveTab('view');
+      setActiveTab('view');
       setSaving(false);
       
       // Show success toast
@@ -383,8 +577,8 @@ export default function ProfileScreen() {
               }
               
               console.log('✅ Logged out successfully');
-              // Navigate to welcome screen
-              router.replace('/welcome');
+              // Navigate to login screen
+              router.replace('/login');
             } catch (error: any) {
               console.error('❌ Logout error:', error);
               showToast('Failed to logout. Please try again.', 'error');
@@ -454,6 +648,12 @@ export default function ProfileScreen() {
           }
           
           setUserProfile(profileData);
+          
+          // Fetch user posts
+          const { data: postsData } = await getUserPosts(userId);
+          if (postsData) {
+            setPosts(postsData);
+          }
         } else {
           console.log('⚠️  No profile data found for this user');
           showToast('No profile data found. Please complete onboarding.', 'error');
@@ -693,6 +893,38 @@ export default function ProfileScreen() {
           )
         )}
 
+        {/* Bio Card - Hinge Style */}
+          <View style={styles.bioCard}>
+          {activeTab === 'edit' ? (
+            <>
+              <TextInput
+                style={styles.bioTitleInput}
+                value={editingProfile?.bio_title || ''}
+                onChangeText={(text) => setEditingProfile({ ...editingProfile, bio_title: text })}
+                placeholder="I want someone who..."
+                placeholderTextColor={theme.placeholder}
+              />
+              <TextInput
+                style={styles.bioInput}
+                value={editingProfile?.bio || ''}
+                onChangeText={(text) => setEditingProfile({ ...editingProfile, bio: text })}
+                placeholder="is family oriented, thoughtful and knows how to have a good time!!"
+                placeholderTextColor={theme.placeholder}
+                multiline
+                numberOfLines={4}
+                textAlignVertical="top"
+              />
+            </>
+          ) : (
+            <View style={styles.bioViewContainer}>
+              {userProfile.bio_title && (
+                <Text style={styles.bioTitleText}>{userProfile.bio_title}</Text>
+              )}
+              <Text style={styles.bioText}>{userProfile.bio || 'No bio yet'}</Text>
+            </View>
+          )}
+          </View>
+
         {/* Basic Info Card */}
         <View style={styles.card}>
           <View style={styles.cardHeader}>
@@ -708,8 +940,11 @@ export default function ProfileScreen() {
                   <TextInput
                     style={styles.editInputValue}
                     value={editingProfile?.first_name || ''}
-                    onChangeText={(text) => setEditingProfile({ ...editingProfile, first_name: text })}
-                    placeholder="First name"
+                    onChangeText={(text) => {
+                      const validated = validateNameInput(text, editingProfile?.first_name || '');
+                      setEditingProfile({ ...editingProfile, first_name: validated });
+                    }}
+                    placeholder="First name (max 10 chars, 2 emojis)"
                     placeholderTextColor={theme.placeholder}
                   />
                 </View>
@@ -718,8 +953,11 @@ export default function ProfileScreen() {
                   <TextInput
                     style={styles.editInputValue}
                     value={editingProfile?.last_name || ''}
-                    onChangeText={(text) => setEditingProfile({ ...editingProfile, last_name: text })}
-                    placeholder="Last name"
+                    onChangeText={(text) => {
+                      const validated = validateNameInput(text, editingProfile?.last_name || '');
+                      setEditingProfile({ ...editingProfile, last_name: validated });
+                    }}
+                    placeholder="Last name (max 10 chars, 2 emojis)"
                     placeholderTextColor={theme.placeholder}
                   />
                 </View>
@@ -1083,28 +1321,127 @@ export default function ProfileScreen() {
           </View>
         )}
 
-        {/* Bio Card */}
-          <View style={styles.card}>
-            <View style={styles.cardHeader}>
-              <Text style={styles.cardTitle}>About</Text>
-            </View>
-          {activeTab === 'edit' ? (
-            <TextInput
-              style={styles.bioInput}
-              value={editingProfile?.bio || ''}
-              onChangeText={(text) => setEditingProfile({ ...editingProfile, bio: text })}
-              placeholder="Tell us about yourself..."
-              placeholderTextColor={theme.placeholder}
-              multiline
-              numberOfLines={4}
-              textAlignVertical="top"
-            />
-          ) : (
-            <Text style={styles.bioText}>{userProfile.bio || 'No bio yet'}</Text>
-          )}
+        {/* Posts Section */}
+        <View style={styles.postsSection}>
+          <View style={styles.postsHeader}>
+            <Text style={styles.postsTitle}>Posts</Text>
           </View>
 
+          {/* Inline Add Post Input - Like Screenshot */}
+          <View style={styles.inlinePostInputContainer}>
+            <TextInput
+              style={styles.inlinePostInput}
+              value={newPostDescription}
+              onChangeText={setNewPostDescription}
+              placeholder="What's on your mind?"
+              placeholderTextColor={theme.placeholder}
+              multiline
+              numberOfLines={2}
+              textAlignVertical="top"
+            />
+            <TouchableOpacity
+              style={styles.inlineImageButton}
+              onPress={handlePickPostImage}
+            >
+              <Ionicons name="image-outline" size={24} color={theme.white} />
+            </TouchableOpacity>
+          </View>
+
+          {/* Title Input (Optional) */}
+          {newPostDescription.trim() || newPostImage ? (
+            <View style={styles.inlinePostOptions}>
+              <TextInput
+                style={styles.inlinePostTitleInput}
+                value={newPostTitle}
+                onChangeText={setNewPostTitle}
+                placeholder="Title (optional)..."
+                placeholderTextColor={theme.placeholder}
+              />
+              {newPostImage && (
+                <View style={styles.inlineImagePreview}>
+                  <Image
+                    source={{ uri: newPostImage }}
+                    style={styles.inlineImagePreviewImage}
+                    contentFit="cover"
+                  />
+                  <TouchableOpacity
+                    style={styles.inlineRemoveImageButton}
+                    onPress={() => setNewPostImage(null)}
+                  >
+                    <Ionicons name="close-circle" size={20} color={theme.error} />
+                  </TouchableOpacity>
+                </View>
+              )}
+              <TouchableOpacity
+                style={[
+                  styles.inlinePostButton,
+                  ((!newPostImage && !newPostDescription.trim()) || posting) && styles.inlinePostButtonDisabled
+                ]}
+                onPress={handleCreatePost}
+                disabled={(!newPostImage && !newPostDescription.trim()) || posting}
+              >
+                {posting ? (
+                  <ActivityIndicator size="small" color={theme.white} />
+                ) : (
+                  <Text style={styles.inlinePostButtonText}>Post</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          ) : null}
+            
+          {posts.length === 0 ? (
+            <View style={styles.noPostsContainer}>
+              <Ionicons name="images-outline" size={48} color={theme.gray} />
+              <Text style={styles.noPostsText}>No posts yet</Text>
+              <Text style={styles.noPostsSubtext}>Share moments from your life!</Text>
+            </View>
+          ) : (
+            <View style={styles.postsList}>
+              {posts.map((post) => (
+                <View key={post.id} style={styles.postCard}>
+                  {/* Title at top - small, gray */}
+                  {post.title && (
+                    <Text style={styles.postCardTitle}>{post.title}</Text>
+                  )}
+                  
+                  {/* Image or Description */}
+                  {post.image_url ? (
+                    <View style={styles.postCardImageContainer}>
+                      <Image
+                        source={{ uri: post.image_url }}
+                        style={styles.postCardImage}
+                        contentFit="cover"
+                        onError={(error) => {
+                          console.error('❌ Error loading post image:', post.image_url, error);
+                        }}
+                        onLoad={() => {
+                          console.log('✅ Post image loaded:', post.image_url);
+                        }}
+                      />
+                    </View>
+                  ) : post.description ? (
+                    <View style={styles.postCardDescriptionContainer}>
+                      <Text style={styles.postCardDescription}>{post.description}</Text>
+                    </View>
+                  ) : null}
+
+                  {/* Delete button - only in edit mode */}
+                  {activeTab === 'edit' && (
+                    <TouchableOpacity
+                      style={styles.deletePostCardButton}
+                      onPress={() => handleDeletePost(post.id)}
+                    >
+                      <Ionicons name="close-circle" size={24} color={theme.error} />
+                    </TouchableOpacity>
+                  )}
+                </View>
+              ))}
+            </View>
+          )}
+        </View>
+
       </ScrollView>
+
 
       {/* Toast Notification */}
       <Toast
@@ -1207,7 +1544,7 @@ const styles = StyleSheet.create({
   photoContainer: {
     width: width * 0.9,
     height: width * 1.2,
-    borderRadius: 20,
+    borderRadius: 0,
     overflow: 'hidden',
     marginRight: 12,
     backgroundColor: theme.lightGray,
@@ -1232,7 +1569,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 20,
+    borderRadius: 0,
   },
   photoIndicatorText: {
     color: theme.white,
@@ -1243,7 +1580,9 @@ const styles = StyleSheet.create({
     backgroundColor: theme.secondary,
     marginHorizontal: 20,
     marginBottom: 16,
-    borderRadius: 16,
+    borderRadius: 0,
+    borderWidth: 1,
+    borderColor: theme.black,
     padding: 20,
   },
   cardHeader: {
@@ -1310,19 +1649,40 @@ const styles = StyleSheet.create({
   tag: {
     paddingHorizontal: 16,
     paddingVertical: 8,
-    borderRadius: 20,
+    borderRadius: 0,
     borderWidth: 1,
-    borderColor: theme.lightGray,
+    borderColor: theme.black,
   },
   tagText: {
     fontSize: 14,
     color: theme.black,
     fontWeight: '500',
   },
+  bioCard: {
+    backgroundColor: theme.secondary,
+    marginHorizontal: 20,
+    marginBottom: 16,
+    borderRadius: 0,
+    borderWidth: 1,
+    borderColor: theme.black,
+    padding: 20,
+    minHeight: 120,
+  },
+  bioViewContainer: {
+    paddingTop: 8,
+  },
+  bioTitleText: {
+    fontSize: 14,
+    color: theme.gray,
+    fontWeight: '400',
+    marginBottom: 12,
+    textAlign: 'left',
+  },
   bioText: {
-    fontSize: 16,
+    fontSize: 24,
     color: theme.black,
-    lineHeight: 24,
+    fontWeight: '700',
+    lineHeight: 32,
     textAlign: 'left',
   },
   editButton: {
@@ -1346,7 +1706,9 @@ const styles = StyleSheet.create({
     right: 20,
     width: 44,
     height: 44,
-    borderRadius: 22,
+    borderRadius: 0,
+    borderWidth: 1,
+    borderColor: theme.black,
     backgroundColor: 'rgba(0, 0, 0, 0.6)',
     justifyContent: 'center',
     alignItems: 'center',
@@ -1361,13 +1723,11 @@ const styles = StyleSheet.create({
   addPhotoButton: {
     width: width * 0.85,
     height: width * 1.2,
-    borderRadius: 20,
+    borderRadius: 0,
     backgroundColor: theme.lightGray,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
-    borderWidth: 2,
-    borderColor: theme.gray,
     borderStyle: 'dashed',
   },
   addPhotoText: {
@@ -1380,7 +1740,7 @@ const styles = StyleSheet.create({
     width: width * 0.9,
     height: width * 1.2,
     marginHorizontal: 20,
-    borderRadius: 20,
+    borderRadius: 0,
     backgroundColor: theme.lightGray,
     justifyContent: 'center',
     alignItems: 'center',
@@ -1405,7 +1765,9 @@ const styles = StyleSheet.create({
     backgroundColor: theme.buttonActive,
     paddingHorizontal: 24,
     paddingVertical: 12,
-    borderRadius: 30,
+    borderRadius: 0,
+    borderWidth: 1,
+    borderColor: theme.black,
     gap: 8,
   },
   addFirstPhotoText: {
@@ -1438,14 +1800,26 @@ const styles = StyleSheet.create({
     marginLeft: 16,
     paddingVertical: 4,
   },
-  bioInput: {
-    fontSize: 16,
-    color: theme.black,
-    lineHeight: 24,
+  bioTitleInput: {
+    fontSize: 14,
+    color: theme.gray,
+    fontWeight: '400',
     textAlign: 'left',
     borderWidth: 1,
-    borderColor: theme.lightGray,
-    borderRadius: 8,
+    borderColor: theme.black,
+    borderRadius: 0,
+    padding: 12,
+    marginBottom: 12,
+  },
+  bioInput: {
+    fontSize: 24,
+    color: theme.black,
+    fontWeight: '700',
+    lineHeight: 32,
+    textAlign: 'left',
+    borderWidth: 1,
+    borderColor: theme.black,
+    borderRadius: 0,
     padding: 12,
     minHeight: 100,
     maxHeight: 200,
@@ -1455,12 +1829,14 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.8)',
     justifyContent: 'center',
     alignItems: 'center',
-    borderRadius: 20,
+    borderRadius: 0,
+    borderWidth: 1,
+    borderColor: theme.black,
   },
   loadingSpinner: {
     width: 40,
     height: 40,
-    borderRadius: 20,
+    borderRadius: 0,
     borderWidth: 3,
     borderColor: theme.lightGray,
     borderTopColor: theme.buttonActive,
@@ -1471,7 +1847,9 @@ const styles = StyleSheet.create({
     backgroundColor: theme.lightGray,
     justifyContent: 'center',
     alignItems: 'center',
-    borderRadius: 20,
+    borderRadius: 0,
+    borderWidth: 1,
+    borderColor: theme.black,
     padding: 20,
   },
   imageErrorText: {
@@ -1485,7 +1863,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 10,
     backgroundColor: theme.buttonActive,
-    borderRadius: 20,
+    borderRadius: 0,
+    borderWidth: 1,
+    borderColor: theme.black,
   },
   retryButtonText: {
     color: theme.white,
@@ -1499,5 +1879,362 @@ const styles = StyleSheet.create({
   },
   saveSpinner: {
     marginRight: 4,
+  },
+  postsSection: {
+    marginHorizontal: 20,
+    marginBottom: 16,
+  },
+  postsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  postsTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: theme.black,
+  },
+  addPostButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: theme.buttonActive,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    gap: 6,
+  },
+  addPostButtonText: {
+    color: theme.white,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  inlinePostInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+    marginBottom: 12,
+    paddingHorizontal: 16,
+  },
+  inlinePostInput: {
+    flex: 1,
+    fontSize: 16,
+    color: theme.black,
+    borderWidth: 1,
+    borderColor: theme.black,
+    borderRadius: 0,
+    padding: 16,
+    minHeight: 50,
+    maxHeight: 100,
+    backgroundColor: theme.white,
+  },
+  inlineImageButton: {
+    width: 50,
+    height: 50,
+    borderRadius: 0,
+    borderWidth: 1,
+    borderColor: theme.black,
+    backgroundColor: Colors.green,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  inlinePostOptions: {
+    paddingHorizontal: 16,
+    marginBottom: 16,
+    gap: 12,
+  },
+  inlinePostTitleInput: {
+    fontSize: 14,
+    color: theme.black,
+    borderWidth: 1,
+    borderColor: theme.black,
+    borderRadius: 0,
+    padding: 10,
+    backgroundColor: theme.white,
+  },
+  inlineImagePreview: {
+    width: 100,
+    height: 100,
+    borderRadius: 0,
+    borderWidth: 1,
+    borderColor: theme.black,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  inlineImagePreviewImage: {
+    width: '100%',
+    height: '100%',
+  },
+  inlineRemoveImageButton: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    borderRadius: 0,
+    borderWidth: 1,
+    borderColor: theme.black,
+  },
+  inlinePostButton: {
+    backgroundColor: theme.buttonActive,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 0,
+    borderWidth: 1,
+    borderColor: theme.black,
+    alignItems: 'center',
+    alignSelf: 'flex-end',
+  },
+  inlinePostButtonDisabled: {
+    opacity: 0.5,
+  },
+  inlinePostButtonText: {
+    color: theme.white,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  noPostsContainer: {
+    alignItems: 'center',
+    paddingVertical: 40,
+    paddingHorizontal: 20,
+  },
+  noPostsText: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: theme.black,
+    marginTop: 12,
+    marginBottom: 4,
+  },
+  noPostsSubtext: {
+    fontSize: 14,
+    color: theme.gray,
+    textAlign: 'center',
+  },
+  postsList: {
+    gap: 24,
+  },
+  postCard: {
+    backgroundColor: theme.secondary,
+    borderRadius: 0,
+    overflow: 'hidden',
+    marginBottom: 8,
+    position: 'relative',
+  },
+  postCardTitle: {
+    fontSize: 14,
+    color: theme.gray,
+    fontWeight: '400',
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 12,
+  },
+  postCardImageContainer: {
+    width: '100%',
+    aspectRatio: 3 / 4,
+    backgroundColor: theme.lightGray,
+  },
+  postCardImage: {
+    width: '100%',
+    height: '100%',
+  },
+  postImagePlaceholder: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: theme.lightGray,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  postImagePlaceholderText: {
+    marginTop: 8,
+    fontSize: 14,
+    color: theme.gray,
+  },
+  deletePostCardButton: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    borderRadius: 0,
+    borderWidth: 1,
+    borderColor: theme.black,
+    padding: 4,
+  },
+  postsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  postItem: {
+    width: (width - 64) / 3, // 3 columns with gaps
+    aspectRatio: 3 / 4,
+    borderRadius: 0,
+    borderWidth: 1,
+    borderColor: theme.black,
+    overflow: 'hidden',
+    backgroundColor: theme.lightGray,
+    position: 'relative',
+  },
+  postImage: {
+    width: '100%',
+    height: '100%',
+  },
+  postTitleOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    padding: 8,
+  },
+  postTitleText: {
+    fontSize: 12,
+    color: theme.white,
+    fontWeight: '500',
+  },
+  deletePostButton: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    borderRadius: 0,
+    borderWidth: 1,
+    borderColor: theme.black,
+  },
+  modalOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1000,
+  },
+  modalContent: {
+    backgroundColor: theme.white,
+    borderRadius: 0,
+    borderWidth: 1,
+    borderColor: theme.black,
+    width: width - 40,
+    maxHeight: '80%',
+    padding: 20,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: theme.black,
+  },
+  modalScrollView: {
+    maxHeight: 500,
+  },
+  postTitleInput: {
+    fontSize: 16,
+    color: theme.black,
+    borderWidth: 1,
+    borderColor: theme.black,
+    borderRadius: 0,
+    padding: 12,
+    marginBottom: 16,
+  },
+  postImagePreview: {
+    width: '100%',
+    aspectRatio: 3 / 4,
+    borderRadius: 0,
+    borderWidth: 1,
+    borderColor: theme.black,
+    overflow: 'hidden',
+    marginBottom: 16,
+    position: 'relative',
+  },
+  postImagePreviewImage: {
+    width: '100%',
+    height: '100%',
+  },
+  removeImageButton: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    borderRadius: 0,
+    borderWidth: 1,
+    borderColor: theme.black,
+  },
+  selectImageButton: {
+    width: '100%',
+    aspectRatio: 3 / 4,
+    borderRadius: 0,
+    backgroundColor: theme.lightGray,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: theme.black,
+    borderStyle: 'dashed',
+  },
+  selectImageText: {
+    marginTop: 8,
+    fontSize: 14,
+    color: theme.gray,
+    fontWeight: '500',
+  },
+  createPostButton: {
+    backgroundColor: theme.buttonActive,
+    paddingVertical: 14,
+    borderRadius: 0,
+    borderWidth: 1,
+    borderColor: theme.black,
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  createPostButtonDisabled: {
+    opacity: 0.5,
+  },
+  createPostButtonText: {
+    color: theme.white,
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  postInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+    marginBottom: 16,
+  },
+  postMainInput: {
+    flex: 1,
+    fontSize: 16,
+    color: theme.black,
+    borderWidth: 1,
+    borderColor: theme.black,
+    borderRadius: 0,
+    padding: 16,
+    minHeight: 50,
+    maxHeight: 150,
+  },
+  imageAttachButton: {
+    width: 50,
+    height: 50,
+    borderRadius: 0,
+    borderWidth: 1,
+    borderColor: theme.black,
+    backgroundColor: Colors.green,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  postCardDescriptionContainer: {
+    padding: 16,
+    backgroundColor: theme.lightGray,
+    minHeight: 100,
+  },
+  postCardDescription: {
+    fontSize: 16,
+    color: theme.black,
+    lineHeight: 24,
   },
 });

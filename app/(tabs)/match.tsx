@@ -77,6 +77,19 @@ export default function MatchScreen() {
     }
   };
 
+  const handleChatPress = (matchProfile: MatchProfile, e: any) => {
+    e.stopPropagation();
+    if (matchProfile.profile?.id) {
+      router.push({
+        pathname: '/chat',
+        params: {
+          matchId: matchProfile.match.id,
+          userId: matchProfile.profile.id,
+        },
+      });
+    }
+  };
+
   return (
     <View style={styles.container}>
       <SafeAreaView style={styles.safeArea} edges={['top']}>
@@ -124,43 +137,51 @@ export default function MatchScreen() {
               const timeAgo = diffInDays === 0 ? 'Today' : diffInDays === 1 ? 'Yesterday' : `${diffInDays}d ago`;
 
               return (
-                <TouchableOpacity
-                  key={match.id}
-                  style={styles.matchCard}
-                  onPress={() => handleMatchPress(matchProfile)}
-                  activeOpacity={0.8}
-                >
-                  <View style={styles.matchPhotoContainer}>
-                    {mainPhoto ? (
-                      <Image
-                        source={{ uri: mainPhoto }}
-                        style={styles.matchPhoto}
-                        resizeMode="cover"
-                      />
-                    ) : (
-                      <View style={styles.matchPhotoPlaceholder}>
-                        <Ionicons name="person" size={40} color={Colors.textLight} />
+                <View key={match.id} style={styles.matchCardWrapper}>
+                  <TouchableOpacity
+                    style={styles.matchCard}
+                    onPress={() => handleMatchPress(matchProfile)}
+                    activeOpacity={0.8}
+                  >
+                    <View style={styles.matchPhotoContainer}>
+                      {mainPhoto ? (
+                        <Image
+                          source={{ uri: mainPhoto }}
+                          style={styles.matchPhoto}
+                          resizeMode="cover"
+                        />
+                      ) : (
+                        <View style={styles.matchPhotoPlaceholder}>
+                          <Ionicons name="person" size={40} color={Colors.textLight} />
+                        </View>
+                      )}
+                      <View style={styles.newMatchBadge}>
+                        <Text style={styles.newMatchText}>New Match</Text>
                       </View>
-                    )}
-                    <View style={styles.newMatchBadge}>
-                      <Text style={styles.newMatchText}>New Match</Text>
                     </View>
-                  </View>
-                  <View style={styles.matchInfo}>
-                    <Text style={styles.matchName} numberOfLines={1}>
-                      {fullName}
-                    </Text>
-                    {profile.age && (
-                      <Text style={styles.matchAge}>{profile.age}</Text>
-                    )}
-                    {profile.location && (
-                      <Text style={styles.matchLocation} numberOfLines={1}>
-                        📍 {profile.location}
+                    <View style={styles.matchInfo}>
+                      <Text style={styles.matchName} numberOfLines={1}>
+                        {fullName}
                       </Text>
-                    )}
-                    <Text style={styles.matchTime}>{timeAgo}</Text>
-                  </View>
-                </TouchableOpacity>
+                      {profile.age && (
+                        <Text style={styles.matchAge}>{profile.age}</Text>
+                      )}
+                      {profile.location && (
+                        <Text style={styles.matchLocation} numberOfLines={1}>
+                          📍 {profile.location}
+                        </Text>
+                      )}
+                      <Text style={styles.matchTime}>{timeAgo}</Text>
+                    </View>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.chatButton}
+                    onPress={(e) => handleChatPress(matchProfile, e)}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons name="chatbubble" size={20} color={Colors.primaryText} />
+                  </TouchableOpacity>
+                </View>
               );
             })}
           </View>
@@ -248,8 +269,13 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: 12,
   },
-  matchCard: {
+  matchCardWrapper: {
     width: CARD_WIDTH,
+    position: 'relative',
+    marginBottom: 12,
+  },
+  matchCard: {
+    width: '100%',
     backgroundColor: Colors.cardBackground,
     borderRadius: 16,
     overflow: 'hidden',
@@ -258,7 +284,22 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 8,
     elevation: 3,
-    marginBottom: 12,
+  },
+  chatButton: {
+    position: 'absolute',
+    bottom: 12,
+    right: 12,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: Colors.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 4,
   },
   matchPhotoContainer: {
     width: '100%',

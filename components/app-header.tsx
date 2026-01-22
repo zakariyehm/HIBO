@@ -1,25 +1,62 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/constants/theme';
+import { Ionicons } from '@expo/vector-icons';
+import React from 'react';
+import { Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 interface AppHeaderProps {
+  title?: string;
+  onActionPress?: () => void;
+  actionIcon?: string;
   onNotificationPress?: () => void;
   onSharePress?: () => void;
-  onInvitePress?: () => void;
   showNotificationDot?: boolean;
   showShareDot?: boolean;
 }
 
 export function AppHeader({
+  title,
+  onActionPress,
+  actionIcon = 'add-outline',
   onNotificationPress,
   onSharePress,
-  onInvitePress,
   showNotificationDot = true,
   showShareDot = true,
 }: AppHeaderProps) {
+  // If title is provided, show "For you" style header
+  if (title) {
+    return (
+      <SafeAreaView 
+        style={styles.safeArea}
+        edges={['top']}
+      >
+        <View style={styles.container}>
+          <View style={styles.topRow}>
+            {/* Title on Left with underline */}
+            <View style={styles.titleContainer}>
+              <Text style={styles.titleText}>{title}</Text>
+              <View style={styles.underline} />
+            </View>
 
+            {/* Action Button on Right */}
+            {onActionPress && (
+              <TouchableOpacity
+                style={styles.actionButton}
+                onPress={onActionPress}
+                activeOpacity={0.7}
+              >
+                <Ionicons name={actionIcon as any} size={16} color="#FFFFFF" />
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+        {/* Divider */}
+        <View style={styles.divider} />
+      </SafeAreaView>
+    );
+  }
+
+  // Default header with logo and notification/share buttons
   return (
     <SafeAreaView 
       style={styles.safeArea}
@@ -35,13 +72,6 @@ export function AppHeader({
 
           {/* Action Buttons on Right */}
           <View style={styles.iconButtonsContainer}>
-            <TouchableOpacity
-              style={styles.inviteButton}
-              onPress={onInvitePress}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.inviteButtonText}>Invite</Text>
-            </TouchableOpacity>
             <TouchableOpacity
               style={styles.iconButton}
               onPress={onNotificationPress}
@@ -100,19 +130,6 @@ const styles = StyleSheet.create({
     gap: 8,
     alignItems: 'center',
   },
-  inviteButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-    backgroundColor: Colors.cardBackground,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  inviteButtonText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: Colors.textDark,
-  },
   iconButton: {
     width: 40,
     height: 40,
@@ -136,13 +153,30 @@ const styles = StyleSheet.create({
     borderColor: '#fff',
   },
   divider: {
-    height: 1,
-    backgroundColor: '#000',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 1,
+    height: 0.5,
+    backgroundColor: Colors.border,
+  },
+  titleContainer: {
+    alignItems: 'flex-start',
+  },
+  titleText: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: Colors.textDark,
+    marginBottom: 4,
+  },
+  underline: {
+    height: 2,
+    width: '100%',
+    backgroundColor: Colors.textDark,
+    borderRadius: 1,
+  },
+  actionButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 6,
+    backgroundColor: '#2C2C2C', // Dark gray background
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });
-

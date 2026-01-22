@@ -4,7 +4,7 @@
 
 import { Toast } from '@/components/Toast';
 import { Colors } from '@/constants/theme';
-import { blockUser, getCurrentUser, getUserProfile, isUserBlocked, recordProfileView } from '@/lib/supabase';
+import { blockUser, getCurrentUser, getUserPosts, getUserProfile, isUserBlocked, Post, recordProfileView } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -47,6 +47,7 @@ interface UserProfile {
   marriage_married_time?: string;
   interests?: string[];
   photos?: string[];
+  bio_title?: string;
   bio?: string;
   created_at?: string;
 }
@@ -61,6 +62,7 @@ export default function ViewProfileScreen() {
   const [toastType, setToastType] = useState<'info' | 'error' | 'success'>('info');
   const [isBlocked, setIsBlocked] = useState(false);
   const [isCurrentUser, setIsCurrentUser] = useState(false);
+  const [posts, setPosts] = useState<Post[]>([]);
 
   const showToast = (message: string, type: 'info' | 'error' | 'success' = 'info') => {
     setToastMessage(message);
@@ -73,6 +75,7 @@ export default function ViewProfileScreen() {
       checkIfCurrentUser();
       checkIfBlocked();
       fetchProfile();
+      fetchPosts();
       // Record that this profile was viewed (like Tinder - once viewed, don't show again)
       recordProfileView(userId);
     } else {
@@ -120,6 +123,34 @@ export default function ViewProfileScreen() {
       console.error('❌ Exception fetching profile:', error);
       showToast('An error occurred', 'error');
       setLoading(false);
+    }
+  };
+
+  const fetchPosts = async () => {
+    if (!userId) return;
+
+    try {
+      const { data, error } = await getUserPosts(userId);
+
+      if (error) {
+        console.error('❌ Error fetching posts:', error);
+        return;
+      }
+
+      if (data) {
+        setPosts(data);
+        console.log('✅ Posts loaded:', data.length);
+        data.forEach((post: Post, index: number) => {
+          console.log(`  Post ${index + 1}:`, {
+            id: post.id,
+            title: post.title,
+            hasImage: !!post.image_url,
+            hasDescription: !!post.description,
+          });
+        });
+      }
+    } catch (error) {
+      console.error('❌ Exception fetching posts:', error);
     }
   };
 
@@ -210,12 +241,7 @@ export default function ViewProfileScreen() {
           <Ionicons name="arrow-back" size={24} color={Colors.textDark} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Profile</Text>
-        {!isCurrentUser && (
-          <TouchableOpacity onPress={handleBlockUser} style={styles.blockButton}>
-            <Ionicons name="ban-outline" size={20} color={Colors.red} />
-          </TouchableOpacity>
-        )}
-        {isCurrentUser && <View style={styles.placeholder} />}
+        <View style={styles.placeholder} />
       </View>
 
       <ScrollView
@@ -265,15 +291,15 @@ export default function ViewProfileScreen() {
           )}
         </View>
 
-        {/* Bio */}
-        {profile.bio && (
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>About</Text>
-            </View>
-            <View style={styles.sectionContent}>
+        {/* Bio - Hinge Style */}
+        {(profile.bio || profile.bio_title) && (
+          <View style={styles.bioSection}>
+            {profile.bio_title && (
+              <Text style={styles.bioTitle}>{profile.bio_title}</Text>
+            )}
+            {profile.bio && (
               <Text style={styles.bio}>{profile.bio}</Text>
-            </View>
+            )}
           </View>
         )}
 
@@ -378,6 +404,41 @@ export default function ViewProfileScreen() {
             </View>
           </View>
         )}
+
+        {/* Posts Section */}
+        {posts.length > 0 && (
+          <View style={styles.postsSection}>
+            <Text style={styles.postsSectionTitle}>Posts</Text>
+            <View style={styles.postsList}>
+              {posts.map((post) => (
+                <View key={post.id} style={styles.postCard}>
+                  {/* Title at top - small, gray */}
+                  {post.title && (
+                    <Text style={styles.postCardTitle}>{post.title}</Text>
+                  )}
+                  
+                  {/* Image */}
+                  {post.image_url && (
+                    <View style={styles.postCardImageContainer}>
+                      <Image
+                        source={{ uri: post.image_url }}
+                        style={styles.postCardImage}
+                        resizeMode="cover"
+                      />
+                    </View>
+                  )}
+                  
+                  {/* Description */}
+                  {post.description && (
+                    <View style={styles.postCardDescriptionContainer}>
+                      <Text style={styles.postCardDescription}>{post.description}</Text>
+                    </View>
+                  )}
+                </View>
+              ))}
+            </View>
+          </View>
+        )}
       </ScrollView>
 
       <Toast
@@ -422,9 +483,6 @@ const styles = StyleSheet.create({
   },
   placeholder: {
     width: 32,
-  },
-  blockButton: {
-    padding: 4,
   },
   loadingContainer: {
     flex: 1,
@@ -551,10 +609,27 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 2,
   },
+  bioSection: {
+    marginBottom: 20,
+    marginHorizontal: 16,
+    backgroundColor: white,
+    padding: 20,
+    borderRadius: 0,
+    borderWidth: 1,
+    borderColor: '#000',
+    minHeight: 120,
+  },
+  bioTitle: {
+    fontSize: 14,
+    fontWeight: '400',
+    color: Colors.textLight,
+    marginBottom: 12,
+  },
   bio: {
-    fontSize: 16,
-    color: darkPurple,
-    lineHeight: 24,
+    fontSize: 24,
+    fontWeight: '700',
+    color: Colors.textDark,
+    lineHeight: 32,
   },
   nationality: {
     fontSize: 16,
@@ -595,6 +670,61 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: darkPurple,
     fontWeight: '500',
+  },
+  postsSection: {
+    marginBottom: 20,
+    marginHorizontal: 16,
+  },
+  postsSectionTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: Colors.textDark,
+    marginBottom: 16,
+  },
+  postsList: {
+    gap: 24,
+  },
+  postCard: {
+    backgroundColor: white,
+    borderRadius: 0,
+    overflow: 'hidden',
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#000',
+  },
+  postCardTitle: {
+    fontSize: 14,
+    color: Colors.textLight,
+    fontWeight: '400',
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 12,
+  },
+  postCardImageContainer: {
+    width: '100%',
+    aspectRatio: 3 / 4,
+    backgroundColor: lightGray,
+  },
+  postCardImage: {
+    width: '100%',
+    height: '100%',
+  },
+  postImagePlaceholder: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: lightGray,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  postCardDescriptionContainer: {
+    padding: 16,
+    backgroundColor: lightGray,
+    minHeight: 100,
+  },
+  postCardDescription: {
+    fontSize: 16,
+    color: Colors.textDark,
+    lineHeight: 24,
   },
 });
 

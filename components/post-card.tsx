@@ -17,7 +17,9 @@ interface PostCardProps {
   profileImage?: string;
   postImage?: string;
   photos?: string[]; // Array of photos for swiper
-  postText: string;
+  postText?: string; // Legacy support
+  bio_title?: string; // Bio title (Hinge-style)
+  bio?: string; // Bio text (Hinge-style)
   nationality?: string[]; // Array of nationalities
   commentCount?: number;
   userId?: string; // User ID for profile navigation
@@ -38,6 +40,8 @@ export function PostCard({
   postImage,
   photos,
   postText,
+  bio_title,
+  bio,
   nationality,
   commentCount = 0,
   userId,
@@ -57,7 +61,7 @@ export function PostCard({
   
   const handleScroll = (event: any) => {
     const contentOffsetX = event.nativeEvent.contentOffset.x;
-    const cardWidth = SCREEN_WIDTH - 64; // Account for padding
+    const cardWidth = SCREEN_WIDTH;
     const index = Math.round(contentOffsetX / cardWidth);
     setCurrentImageIndex(index);
   };
@@ -286,7 +290,7 @@ export function PostCard({
             onPress={handleLike}
             disabled={isProcessing || !userId}
           >
-            <Ionicons name="heart" size={14} color={Colors.green} />
+            <Ionicons name="heart" size={12} color={Colors.green} />
             <Text style={[styles.actionButtonText, styles.likeButtonText]}>Like</Text>
           </TouchableOpacity>
           <TouchableOpacity 
@@ -294,30 +298,26 @@ export function PostCard({
             onPress={handlePass}
             disabled={isProcessing || !userId}
           >
-            <Ionicons name="close" size={14} color={Colors.red} />
+            <Ionicons name="close" size={12} color={Colors.red} />
             <Text style={[styles.actionButtonText, styles.passButtonText]}>Pass</Text>
           </TouchableOpacity>
         </View>
 
-        {/* Post Text */}
-        <View style={styles.postTextContainer}>
-          <Text style={styles.postText}>
-            {postText}
-            {postText.length > 100 && (
-              <Text style={styles.showMore}> Show more</Text>
+        {/* Bio Section - Hinge Style */}
+        {(bio || bio_title || postText) && (
+          <View style={styles.bioContainer}>
+            {bio_title && (
+              <Text style={styles.bioTitle}>{bio_title}</Text>
             )}
-          </Text>
-          
-          {/* Nationality */}
-          {nationality && nationality.length > 0 && (
-            <View style={styles.nationalityContainer}>
-              <Ionicons name="flag" size={14} color={Colors.textLight} style={styles.nationalityIcon} />
-              <Text style={styles.nationalityText}>
-                {nationality.join(', ')}
-              </Text>
-            </View>
-          )}
-        </View>
+            {bio && (
+              <Text style={styles.bioText}>{bio}</Text>
+            )}
+            {/* Legacy support for postText */}
+            {!bio && postText && (
+              <Text style={styles.bioText}>{postText}</Text>
+            )}
+          </View>
+        )}
 
       </View>
 
@@ -350,7 +350,6 @@ export function PostCard({
 
 const styles = StyleSheet.create({
   container: {
-    marginBottom: 16,
   },
   titleContainer: {
     marginBottom: 12,
@@ -363,14 +362,6 @@ const styles = StyleSheet.create({
     letterSpacing: -0.5,
   },
   card: {
-    backgroundColor: Colors.cardBackground,
-    borderRadius: 0,
-    padding: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
   },
   profileHeader: {
     flexDirection: 'row',
@@ -388,7 +379,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   profileName: {
-    fontSize: 18,
+    fontSize: 28,
     fontWeight: 'bold',
     color: Colors.textDark,
   },
@@ -440,7 +431,6 @@ const styles = StyleSheet.create({
     top: 50,
     right: 16,
     backgroundColor: Colors.cardBackground,
-    borderRadius: 12,
     borderWidth: 1,
     borderColor: Colors.border,
     shadowColor: '#000',
@@ -470,17 +460,22 @@ const styles = StyleSheet.create({
   },
   imageContainer: {
     marginBottom: 12,
-    borderRadius: 12,
+    borderRadius: 16,
     overflow: 'hidden',
     position: 'relative',
+    borderWidth: 0.5,
+    borderColor: '#000000',
   },
   imageScrollView: {
-    width: SCREEN_WIDTH - 64, // Account for card padding (16*2) + margin (16*2)
+    width: SCREEN_WIDTH,
   },
   postImage: {
-    width: SCREEN_WIDTH - 64,
+    width: SCREEN_WIDTH,
     height: 400,
     resizeMode: 'cover',
+    borderRadius: 16,
+    borderWidth: 0.5,
+    borderColor: '#000000',
   },
   paginationContainer: {
     position: 'absolute',
@@ -511,7 +506,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.6)',
     paddingHorizontal: 10,
     paddingVertical: 4,
-    borderRadius: 12,
   },
   imageCounterText: {
     color: '#FFFFFF',
@@ -526,15 +520,14 @@ const styles = StyleSheet.create({
   },
   actionButton: {
     backgroundColor: Colors.cardBackground,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     borderWidth: 1,
     borderColor: Colors.border,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
+    gap: 4,
   },
   likeButton: {
     borderColor: Colors.green,
@@ -545,7 +538,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FEF2F2',
   },
   actionButtonText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600',
   },
   likeButtonText: {
@@ -557,6 +550,24 @@ const styles = StyleSheet.create({
   actionButtonDisabled: {
     opacity: 0.5,
   },
+  bioContainer: {
+    marginBottom: 12,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 0,
+    padding: 16,
+  },
+  bioTitle: {
+    fontSize: 13,
+    color: Colors.textDark,
+    fontWeight: '400',
+    marginBottom: 8,
+  },
+  bioText: {
+    fontSize: 20,
+    color: Colors.textDark,
+    fontWeight: '700',
+    lineHeight: 28,
+  },
   postTextContainer: {
     marginBottom: 12,
   },
@@ -567,22 +578,6 @@ const styles = StyleSheet.create({
   },
   showMore: {
     color: Colors.textLight,
-  },
-  nationalityContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 8,
-    paddingTop: 8,
-    borderTopWidth: 1,
-    borderTopColor: Colors.borderLight,
-  },
-  nationalityIcon: {
-    marginRight: 6,
-  },
-  nationalityText: {
-    fontSize: 13,
-    color: Colors.textLight,
-    fontWeight: '500',
   },
 });
 

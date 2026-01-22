@@ -6,6 +6,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient } from '@supabase/supabase-js';
 import 'react-native-url-polyfill/auto';
+import { decryptMessage, deriveMatchKey, encryptMessage } from './encryption';
 
 // Supabase configuration
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
@@ -236,7 +237,7 @@ export const getAllUserProfiles = async (excludeUserId?: string) => {
     
     let query = supabase
       .from('profiles')
-      .select('id, first_name, last_name, location, bio, photos, nationality, gender, interested_in, created_at')
+      .select('id, first_name, last_name, location, bio, bio_title, photos, nationality, gender, interested_in, created_at')
       .order('created_at', { ascending: false });
     
     // Exclude current user if provided
@@ -786,6 +787,467 @@ export const getViewedProfiles = async () => {
     return { data: viewedIds, error: null };
   } catch (error: any) {
     console.error('❌ Exception in getViewedProfiles:', error);
+    return { data: null, error };
+  }
+};
+
+// Messaging functions with End-to-End Encryption
+export const sendMessage = async (receiverId: string, matchId: string, content: string) => {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) {
+      return { data: null, error: { message: 'Not authenticated' } };
+    }
+
+    const senderId = session.user.id;
+
+    // Prevent self-messaging
+    if (senderId === receiverId) {
+      return { data: null, error: { message: 'Cannot send message to yourself' } };
+    }
+
+    // Verify match exists and user is part of it
+    const { data: match, error: matchError } = await supabase
+      .from('matches')
+      .select('*')
+      .eq('id', matchId)
+      .or(`user1_id.eq.${senderId},user2_id.eq.${senderId}`)
+      .maybeSingle();
+
+    if (matchError || !match) {
+      console.error('❌ Error verifying match:', matchError);
+      return { data: null, error: { message: 'Match not found or unauthorized' } };
+    }
+
+    // Verify receiver is part of the match
+    if (match.user1_id !== receiverId && match.user2_id !== receiverId) {
+      return { data: null, error: { message: 'Receiver is not part of this match' } };
+    }
+
+    // Encrypt message content (End-to-End Encryption)
+    const encryptionKey = deriveMatchKey(matchId, match.user1_id, match.user2_id);
+    const encryptedContent = encryptMessage(content.trim(), encryptionKey);
+
+    const { data, error } = await supabase
+      .from('messages')
+      .insert({
+        sender_id: senderId,
+        receiver_id: receiverId,
+        match_id: matchId,
+        content: encryptedContent, // Store encrypted content
+        read: false,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error('❌ Error sending message:', error);
+      return { data: null, error };
+    }
+
+    // Decrypt the message before returning (for immediate display)
+    const decryptedData = {
+      ...data,
+      content: decryptMessage(data.content, encryptionKey),
+    };
+
+    console.log('✅ Encrypted message sent successfully');
+    return { data: decryptedData, error: null };
+  } catch (error: any) {
+    console.error('❌ Exception in sendMessage:', error);
+    return { data: null, error };
+  }
+};
+
+export const getMessages = async (matchId: string) => {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) {
+      return { data: null, error: { message: 'Not authenticated' } };
+    }
+
+    const userId = session.user.id;
+
+    // Verify match exists and user is part of it
+    const { data: match, error: matchError } = await supabase
+      .from('matches')
+      .select('*')
+      .eq('id', matchId)
+      .or(`user1_id.eq.${userId},user2_id.eq.${userId}`)
+      .maybeSingle();
+
+    if (matchError || !match) {
+      console.error('❌ Error verifying match:', matchError);
+      return { data: null, error: { message: 'Match not found or unauthorized' } };
+    }
+
+    // Get all messages for this match
+    const { data, error } = await supabase
+      .from('messages')
+      .select('*')
+      .eq('match_id', matchId)
+      .order('created_at', { ascending: true });
+
+    if (error) {
+      console.error('❌ Error fetching messages:', error);
+      return { data: null, error };
+    }
+
+    // Decrypt all messages (End-to-End Decryption)
+    const encryptionKey = deriveMatchKey(matchId, match.user1_id, match.user2_id);
+    const decryptedMessages = (data || []).map((message) => ({
+      ...message,
+      content: decryptMessage(message.content, encryptionKey),
+    }));
+
+    return { data: decryptedMessages, error: null };
+  } catch (error: any) {
+    console.error('❌ Exception in getMessages:', error);
+    return { data: null, error };
+  }
+};
+
+export const getConversations = async () => {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) {
+      return { data: null, error: { message: 'Not authenticated' } };
+    }
+
+    const userId = session.user.id;
+
+    // Get all matches for this user
+    const { data: matches, error: matchesError } = await supabase
+      .from('matches')
+      .select('*')
+      .or(`user1_id.eq.${userId},user2_id.eq.${userId}`)
+      .order('created_at', { ascending: false });
+
+    if (matchesError) {
+      console.error('❌ Error fetching matches:', matchesError);
+      return { data: null, error: matchesError };
+    }
+
+    if (!matches || matches.length === 0) {
+      return { data: [], error: null };
+    }
+
+    // Get last message and unread count for each match
+    const conversations = await Promise.all(
+      matches.map(async (match) => {
+        const partnerId = match.user1_id === userId ? match.user2_id : match.user1_id;
+
+        // Get last message
+        const { data: lastMessage } = await supabase
+          .from('messages')
+          .select('*')
+          .eq('match_id', match.id)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        // Get unread count
+        const { count: unreadCount } = await supabase
+          .from('messages')
+          .select('*', { count: 'exact', head: true })
+          .eq('match_id', match.id)
+          .eq('receiver_id', userId)
+          .eq('read', false);
+
+        // Get partner profile
+        const { data: profile } = await getUserProfile(partnerId);
+
+        return {
+          match,
+          partner: profile,
+          lastMessage: lastMessage || null,
+          unreadCount: unreadCount || 0,
+        };
+      })
+    );
+
+    // Filter out conversations with null profiles and sort by last message time
+    const validConversations = conversations
+      .filter((c) => c.partner !== null)
+      .sort((a, b) => {
+        const aTime = a.lastMessage?.created_at || a.match.created_at;
+        const bTime = b.lastMessage?.created_at || b.match.created_at;
+        return new Date(bTime).getTime() - new Date(aTime).getTime();
+      });
+
+    return { data: validConversations, error: null };
+  } catch (error: any) {
+    console.error('❌ Exception in getConversations:', error);
+    return { data: null, error };
+  }
+};
+
+export const getTotalUnreadCount = async () => {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) {
+      return { data: 0, error: null };
+    }
+
+    const userId = session.user.id;
+
+    // Get total count of unread messages for this user
+    const { count, error } = await supabase
+      .from('messages')
+      .select('*', { count: 'exact', head: true })
+      .eq('receiver_id', userId)
+      .eq('read', false);
+
+    if (error) {
+      console.error('❌ Error getting unread count:', error);
+      return { data: 0, error };
+    }
+
+    return { data: count || 0, error: null };
+  } catch (error: any) {
+    console.error('❌ Exception in getTotalUnreadCount:', error);
+    return { data: 0, error };
+  }
+};
+
+export const markMessagesAsRead = async (matchId: string) => {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) {
+      return { data: null, error: { message: 'Not authenticated' } };
+    }
+
+    const userId = session.user.id;
+
+    // Verify match exists and user is part of it
+    const { data: match, error: matchError } = await supabase
+      .from('matches')
+      .select('*')
+      .eq('id', matchId)
+      .or(`user1_id.eq.${userId},user2_id.eq.${userId}`)
+      .maybeSingle();
+
+    if (matchError || !match) {
+      console.error('❌ Error verifying match:', matchError);
+      return { data: null, error: { message: 'Match not found or unauthorized' } };
+    }
+
+    // Mark all unread messages as read
+    const { error } = await supabase
+      .from('messages')
+      .update({ read: true })
+      .eq('match_id', matchId)
+      .eq('receiver_id', userId)
+      .eq('read', false);
+
+    if (error) {
+      console.error('❌ Error marking messages as read:', error);
+      return { data: null, error };
+    }
+
+    return { data: { success: true }, error: null };
+  } catch (error: any) {
+    console.error('❌ Exception in markMessagesAsRead:', error);
+    return { data: null, error };
+  }
+};
+
+// Posts functions
+export interface Post {
+  id: string;
+  user_id: string;
+  title?: string;
+  description?: string;
+  image_url?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export const createPost = async (
+  title: string | undefined, 
+  imageUri: string | null, 
+  description: string | undefined
+) => {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) {
+      return { data: null, error: { message: 'Not authenticated' } };
+    }
+
+    const userId = session.user.id;
+
+    let imageUrl: string | null = null;
+
+    // Upload image if provided
+    if (imageUri) {
+      const imageName = `post_${Date.now()}.jpg`;
+      const { data: uploadData, error: uploadError } = await uploadImage(userId, imageUri, imageName, 'posts');
+
+      if (uploadError || !uploadData) {
+        console.error('❌ Error uploading post image:', uploadError);
+        return { data: null, error: uploadError || { message: 'Failed to upload image' } };
+      }
+
+      // Get the public URL from upload data
+      imageUrl = uploadData.publicUrl || uploadData.path || null;
+      console.log('📸 Post image URL:', imageUrl);
+    }
+
+    // Validate: must have either image or description
+    if (!imageUrl && !description) {
+      return { data: null, error: { message: 'Post must have either an image or description' } };
+    }
+
+    // Create post in database
+    const { data, error } = await supabase
+      .from('posts')
+      .insert([
+        {
+          user_id: userId,
+          title: title || null,
+          description: description || null,
+          image_url: imageUrl || null,
+        },
+      ])
+      .select()
+      .single();
+
+    if (error) {
+      console.error('❌ Error creating post:', error);
+      return { data: null, error };
+    }
+
+    console.log('✅ Post created successfully');
+    return { data, error: null };
+  } catch (error: any) {
+    console.error('❌ Exception in createPost:', error);
+    return { data: null, error };
+  }
+};
+
+export const getUserPosts = async (userId: string) => {
+  try {
+    const { data, error } = await supabase
+      .from('posts')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('❌ Error fetching posts:', error);
+      return { data: null, error };
+    }
+
+    return { data, error: null };
+  } catch (error: any) {
+    console.error('❌ Exception in getUserPosts:', error);
+    return { data: null, error };
+  }
+};
+
+export const deletePost = async (postId: string) => {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) {
+      return { data: null, error: { message: 'Not authenticated' } };
+    }
+
+    const { error } = await supabase
+      .from('posts')
+      .delete()
+      .eq('id', postId)
+      .eq('user_id', session.user.id);
+
+    if (error) {
+      console.error('❌ Error deleting post:', error);
+      return { data: null, error };
+    }
+
+    return { data: { success: true }, error: null };
+  } catch (error: any) {
+    console.error('❌ Exception in deletePost:', error);
+    return { data: null, error };
+  }
+};
+
+export interface PostWithProfile extends Post {
+  user_first_name?: string;
+  user_last_name?: string;
+  user_location?: string;
+  user_photos?: string[];
+}
+
+export const getAllPosts = async (excludeUserId?: string) => {
+  try {
+    console.log('🔍 Fetching all posts...');
+    
+    // Get blocked users list
+    const { data: blockedUsers } = await getBlockedUsers();
+    const blockedIds = blockedUsers || [];
+    
+    // Get viewed profiles list
+    const { data: viewedProfiles } = await getViewedProfiles();
+    const viewedIds = viewedProfiles || [];
+    
+    // Get all posts
+    let query = supabase
+      .from('posts')
+      .select('*')
+      .order('created_at', { ascending: false });
+    
+    // Exclude current user if provided
+    if (excludeUserId) {
+      query = query.neq('user_id', excludeUserId);
+    }
+    
+    const { data: postsData, error } = await query;
+    
+    if (error) {
+      console.error('❌ Error fetching posts:', error);
+      return { data: null, error };
+    }
+    
+    if (!postsData || postsData.length === 0) {
+      return { data: [], error: null };
+    }
+    
+    // Get user IDs from posts
+    const userIds = [...new Set(postsData.map((post: any) => post.user_id))];
+    
+    // Fetch profiles for all users
+    const { data: profilesData } = await supabase
+      .from('profiles')
+      .select('id, first_name, last_name, location, photos, gender, interested_in')
+      .in('id', userIds);
+    
+    // Create a map of user_id to profile
+    const profileMap = new Map();
+    (profilesData || []).forEach((profile: any) => {
+      profileMap.set(profile.id, profile);
+    });
+    
+    // Combine posts with profile data
+    const postsWithProfiles = postsData.map((post: any) => {
+      const profile = profileMap.get(post.user_id);
+      return {
+        ...post,
+        user_first_name: profile?.first_name,
+        user_last_name: profile?.last_name,
+        user_location: profile?.location,
+        user_photos: profile?.photos,
+      };
+    });
+    
+    // Filter out posts from blocked users and viewed profiles
+    const filteredPosts = postsWithProfiles.filter((post: any) => {
+      const userId = post.user_id;
+      return !blockedIds.includes(userId) && !viewedIds.includes(userId);
+    });
+    
+    console.log(`✅ Loaded ${filteredPosts.length} posts`);
+    return { data: filteredPosts, error: null };
+  } catch (error: any) {
+    console.error('❌ Exception in getAllPosts:', error);
     return { data: null, error };
   }
 };
