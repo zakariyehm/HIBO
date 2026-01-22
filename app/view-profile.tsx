@@ -113,7 +113,7 @@ export default function ViewProfileScreen() {
 
       if (data) {
         setProfile(data);
-        console.log('✅ Profile loaded:', data.first_name, data.last_name);
+        // console.log('✅ Profile loaded:', data.first_name, data.last_name);
       } else {
         showToast('Profile not found', 'error');
       }
@@ -139,15 +139,7 @@ export default function ViewProfileScreen() {
 
       if (data) {
         setPosts(data);
-        console.log('✅ Posts loaded:', data.length);
-        data.forEach((post: Post, index: number) => {
-          console.log(`  Post ${index + 1}:`, {
-            id: post.id,
-            title: post.title,
-            hasImage: !!post.image_url,
-            hasDescription: !!post.description,
-          });
-        });
+        // console.log('✅ Posts loaded:', data.length);
       }
     } catch (error) {
       console.error('❌ Exception fetching posts:', error);
@@ -162,7 +154,10 @@ export default function ViewProfileScreen() {
           <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
             <Ionicons name="arrow-back" size={24} color={Colors.textDark} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Profile</Text>
+          <View style={styles.headerTitleContainer}>
+            <Text style={styles.headerEmoji}>🕵️</Text>
+            <Text style={styles.headerTitle}>Background Check</Text>
+          </View>
           <View style={styles.placeholder} />
         </View>
         <View style={styles.loadingContainer}>
@@ -181,7 +176,10 @@ export default function ViewProfileScreen() {
           <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
             <Ionicons name="arrow-back" size={24} color={Colors.textDark} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Profile</Text>
+          <View style={styles.headerTitleContainer}>
+            <Text style={styles.headerEmoji}>🕵️</Text>
+            <Text style={styles.headerTitle}>Background Check</Text>
+          </View>
           <View style={styles.placeholder} />
         </View>
         <View style={styles.emptyContainer}>
@@ -240,7 +238,10 @@ export default function ViewProfileScreen() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color={Colors.textDark} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Profile</Text>
+        <View style={styles.headerTitleContainer}>
+          <Text style={styles.headerEmoji}>🕵️</Text>
+          <Text style={styles.headerTitle}>Background Check</Text>
+        </View>
         <View style={styles.placeholder} />
       </View>
 
@@ -249,121 +250,117 @@ export default function ViewProfileScreen() {
         contentContainerStyle={[styles.contentContainer, { paddingBottom: Math.max(insets.bottom, 32) + 32 }]}
         showsVerticalScrollIndicator={false}
       >
-        {/* Photos Section */}
-        {photos.length > 0 && (
-          <View style={styles.photosSection}>
-            <ScrollView
-              horizontal
-              pagingEnabled
-              showsHorizontalScrollIndicator={false}
-              style={styles.photosScrollView}
-            >
-              {photos.map((photo, index) => (
-                <Image
-                  key={index}
-                  source={{ uri: photo }}
-                  style={styles.photo}
-                  resizeMode="cover"
-                />
-              ))}
-            </ScrollView>
-            {photos.length > 1 && (
-              <View style={styles.photoCounter}>
-                <Text style={styles.photoCounterText}>
-                  1 / {photos.length}
-                </Text>
-              </View>
-            )}
-          </View>
-        )}
-
-        {/* Basic Information */}
-        <View style={styles.basicInfoCard}>
-          <Text style={styles.name}>{fullName || 'No name'}</Text>
-          {profile.location && (
-            <View style={styles.locationRow}>
-              <Ionicons name="location-outline" size={16} color={Colors.textLight} />
-              <Text style={styles.location}>{profile.location}</Text>
-            </View>
-          )}
-          {profile.age && (
-            <Text style={styles.age}>{profile.age} years old</Text>
-          )}
+        {/* Name Box - Purple Highlighted */}
+        <View style={styles.nameBox}>
+          <Text style={styles.nameText}>{fullName || 'UNKNOWN'}</Text>
         </View>
 
-        {/* Bio - Hinge Style */}
-        {(profile.bio || profile.bio_title) && (
-          <View style={styles.bioSection}>
-            {profile.bio_title && (
-              <Text style={styles.bioTitle}>{profile.bio_title}</Text>
-            )}
-            {profile.bio && (
-              <Text style={styles.bio}>{profile.bio}</Text>
-            )}
+        {/* Photo Section */}
+        {photos.length > 0 && (
+          <View style={styles.photosSection}>
+            <Image
+              source={{ uri: photos[0] }}
+              style={styles.photo}
+              resizeMode="cover"
+            />
           </View>
         )}
 
-        {/* Nationality */}
-        {profile.nationality && profile.nationality.length > 0 && (
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Nationality</Text>
-            </View>
-            <View style={styles.sectionContent}>
-              <Text style={styles.nationality}>
-                {profile.nationality.join(', ')}
-              </Text>
-            </View>
+        {/* Background Check Sections */}
+        
+        {/* Personal Information */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>PERSONAL INFORMATION</Text>
           </View>
-        )}
+          <View style={styles.sectionContent}>
+            {profile.age && (
+              <Text style={styles.sectionText}>Age: {profile.age} years</Text>
+            )}
+            {profile.location && (
+              <Text style={styles.sectionText}>Location: {profile.location}</Text>
+            )}
+            {profile.gender && (
+              <Text style={styles.sectionText}>Gender: {profile.gender}</Text>
+            )}
+            {profile.nationality && profile.nationality.length > 0 && (
+              <Text style={styles.sectionText}>Nationality: {profile.nationality.join(', ')}</Text>
+            )}
+          </View>
+        </View>
 
-        {/* Professional Details */}
+        {/* Professional Background */}
         {(profile.profession || profile.education_level) && (
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Professional</Text>
+              <Text style={styles.sectionTitle}>PROFESSIONAL BACKGROUND</Text>
             </View>
             <View style={styles.sectionContent}>
               {profile.profession && (
-                <View style={styles.infoRow}>
-                  <Text style={styles.infoLabel}>Profession:</Text>
-                  <Text style={styles.infoValue}>{profile.profession}</Text>
-                </View>
+                <Text style={styles.sectionText}>{profile.profession}</Text>
               )}
               {profile.education_level && (
-                <View style={styles.infoRow}>
-                  <Text style={styles.infoLabel}>Education:</Text>
-                  <Text style={styles.infoValue}>{profile.education_level}</Text>
-                </View>
+                <Text style={styles.sectionText}>Education: {profile.education_level}</Text>
               )}
             </View>
           </View>
         )}
 
-        {/* Personal Details */}
-        {(profile.gender || profile.interested_in || profile.looking_for) && (
+        {/* Bio/Description */}
+        {(profile.bio || profile.bio_title) && (
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Personal</Text>
+              <Text style={styles.sectionTitle}>DESCRIPTION</Text>
             </View>
             <View style={styles.sectionContent}>
-              {profile.gender && (
-                <View style={styles.infoRow}>
-                  <Text style={styles.infoLabel}>Gender:</Text>
-                  <Text style={styles.infoValue}>{profile.gender}</Text>
-                </View>
+              {profile.bio_title && (
+                <Text style={styles.sectionText}>{profile.bio_title}</Text>
+              )}
+              {profile.bio && (
+                <Text style={styles.sectionText}>{profile.bio}</Text>
+              )}
+            </View>
+          </View>
+        )}
+
+        {/* Relationship Status */}
+        {(profile.looking_for || profile.interested_in || profile.marriage_know_time || profile.marriage_married_time) && (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>RELATIONSHIP STATUS</Text>
+            </View>
+            <View style={styles.sectionContent}>
+              {profile.looking_for && (
+                <Text style={styles.sectionText}>Looking for: {profile.looking_for}</Text>
               )}
               {profile.interested_in && (
-                <View style={styles.infoRow}>
-                  <Text style={styles.infoLabel}>Interested in:</Text>
-                  <Text style={styles.infoValue}>{profile.interested_in}</Text>
-                </View>
+                <Text style={styles.sectionText}>Interested in: {profile.interested_in}</Text>
               )}
-              {profile.looking_for && (
-                <View style={styles.infoRow}>
-                  <Text style={styles.infoLabel}>Looking for:</Text>
-                  <Text style={styles.infoValue}>{profile.looking_for}</Text>
-                </View>
+              {profile.marriage_know_time && (
+                <Text style={styles.sectionText}>Know time: {profile.marriage_know_time}</Text>
+              )}
+              {profile.marriage_married_time && (
+                <Text style={styles.sectionText}>Married time: {profile.marriage_married_time}</Text>
+              )}
+            </View>
+          </View>
+        )}
+
+        {/* Lifestyle */}
+        {(profile.smoke || profile.has_children || profile.grow_up) && (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>LIFESTYLE</Text>
+            </View>
+            <View style={styles.sectionContent}>
+              {profile.smoke && (
+                <Text style={styles.sectionText}>Smoking: {profile.smoke}</Text>
+              )}
+              {profile.has_children && (
+                <Text style={styles.sectionText}>Children: {profile.has_children}</Text>
+              )}
+              {profile.grow_up && (
+                <Text style={styles.sectionText}>Grew up: {profile.grow_up}</Text>
               )}
             </View>
           </View>
@@ -373,34 +370,22 @@ export default function ViewProfileScreen() {
         {profile.interests && profile.interests.length > 0 && (
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Interests</Text>
+              <Text style={styles.sectionTitle}>INTERESTS</Text>
             </View>
             <View style={styles.sectionContent}>
-              <View style={styles.interestsContainer}>
-                {profile.interests.map((interest, index) => (
-                  <View key={index} style={styles.interestTag}>
-                    <Text style={styles.interestText}>{interest}</Text>
-                  </View>
-                ))}
-              </View>
+              <Text style={styles.sectionText}>{profile.interests.join(', ')}</Text>
             </View>
           </View>
         )}
 
-        {/* Personality */}
+        {/* Personality Traits */}
         {profile.personality && profile.personality.length > 0 && (
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Personality</Text>
+              <Text style={styles.sectionTitle}>PERSONALITY TRAITS</Text>
             </View>
             <View style={styles.sectionContent}>
-              <View style={styles.interestsContainer}>
-                {profile.personality.map((trait, index) => (
-                  <View key={index} style={styles.interestTag}>
-                    <Text style={styles.interestText}>{trait}</Text>
-                  </View>
-                ))}
-              </View>
+              <Text style={styles.sectionText}>{profile.personality.join(', ')}</Text>
             </View>
           </View>
         )}
@@ -451,17 +436,16 @@ export default function ViewProfileScreen() {
   );
 }
 
-// Color palette matching the design
-const purple = '#D4C5F9'; // Light purple for section headers
-const pink = '#FFB6C1'; // Light pink for accents
-const darkPurple = '#8B6FBF'; // Dark purple text
+// Color palette matching the background check design
+const purple = '#D5AFFD'; // Purple for section headers
 const white = '#FFFFFF';
 const lightGray = '#F5F5F5';
+const black = '#000000';
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: '#F0E6FF', // Light purple background
   },
   header: {
     flexDirection: 'row',
@@ -476,10 +460,19 @@ const styles = StyleSheet.create({
   backButton: {
     padding: 4,
   },
+  headerTitleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  headerEmoji: {
+    fontSize: 24,
+  },
   headerTitle: {
     fontSize: 18,
-    fontWeight: '600',
+    fontWeight: '700',
     color: Colors.textDark,
+    letterSpacing: 0.5,
   },
   placeholder: {
     width: 32,
@@ -511,165 +504,68 @@ const styles = StyleSheet.create({
   contentContainer: {
     paddingBottom: 32,
   },
+  // Name box - purple highlighted
+  nameBox: {
+    backgroundColor: purple,
+    marginHorizontal: 16,
+    marginTop: 16,
+    marginBottom: 16,
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    borderWidth: 2,
+    borderColor: black,
+  },
+  nameText: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: black,
+    textAlign: 'center',
+    letterSpacing: 1,
+  },
   photosSection: {
     marginBottom: 24,
+    marginHorizontal: 16,
     position: 'relative',
   },
-  photosScrollView: {
-    width: SCREEN_WIDTH,
-    height: 400,
-  },
   photo: {
-    width: SCREEN_WIDTH,
-    height: 400,
+    width: SCREEN_WIDTH - 32,
+    height: 500,
+    borderWidth: 2,
+    borderColor: black,
   },
-  photoCounter: {
-    position: 'absolute',
-    top: 16,
-    right: 16,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  photoCounterText: {
-    color: white,
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  // Basic info section with rounded card
-  basicInfoCard: {
-    backgroundColor: white,
-    marginHorizontal: 16,
-    marginBottom: 20,
-    padding: 20,
-    borderRadius: 0,
-    borderWidth: 1,
-    borderColor: '#000',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
-  },
-  name: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: Colors.textDark,
-    marginBottom: 12,
-  },
-  locationRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginBottom: 8,
-  },
-  location: {
-    fontSize: 16,
-    color: Colors.textLight,
-  },
-  age: {
-    fontSize: 16,
-    color: Colors.textLight,
-  },
-  // Section with purple header
+  // Section with purple header and white content
   section: {
-    marginBottom: 20,
+    marginBottom: 0,
     marginHorizontal: 16,
   },
   sectionHeader: {
     backgroundColor: purple,
-    paddingVertical: 12,
+    paddingVertical: 14,
     paddingHorizontal: 16,
-    borderTopLeftRadius: 0,
-    borderTopRightRadius: 0,
-    borderWidth: 1,
-    borderColor: '#000',
+    borderWidth: 2,
+    borderColor: black,
     borderBottomWidth: 0,
-    marginBottom: 0,
   },
   sectionTitle: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '700',
-    color: white,
+    color: black,
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    letterSpacing: 1,
   },
   sectionContent: {
     backgroundColor: white,
     padding: 16,
-    borderBottomLeftRadius: 0,
-    borderBottomRightRadius: 0,
-    borderWidth: 1,
-    borderColor: '#000',
+    borderWidth: 2,
+    borderColor: black,
     borderTopWidth: 0,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
-  },
-  bioSection: {
     marginBottom: 20,
-    marginHorizontal: 16,
-    backgroundColor: white,
-    padding: 20,
-    borderRadius: 0,
-    borderWidth: 1,
-    borderColor: '#000',
-    minHeight: 120,
   },
-  bioTitle: {
-    fontSize: 14,
-    fontWeight: '400',
-    color: Colors.textLight,
-    marginBottom: 12,
-  },
-  bio: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: Colors.textDark,
-    lineHeight: 32,
-  },
-  nationality: {
+  sectionText: {
     fontSize: 16,
-    color: darkPurple,
-    fontWeight: '500',
-  },
-  infoRow: {
-    flexDirection: 'row',
-    marginBottom: 12,
-    gap: 8,
-  },
-  infoLabel: {
-    fontSize: 16,
-    color: Colors.textLight,
-    fontWeight: '500',
-    minWidth: 120,
-  },
-  infoValue: {
-    fontSize: 16,
-    color: darkPurple,
-    flex: 1,
-    fontWeight: '500',
-  },
-  interestsContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  interestTag: {
-    backgroundColor: lightGray,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 0,
-    borderWidth: 1,
-    borderColor: '#000',
-  },
-  interestText: {
-    fontSize: 14,
-    color: darkPurple,
-    fontWeight: '500',
+    color: black,
+    marginBottom: 8,
+    lineHeight: 22,
   },
   postsSection: {
     marginBottom: 20,
@@ -689,8 +585,6 @@ const styles = StyleSheet.create({
     borderRadius: 0,
     overflow: 'hidden',
     marginBottom: 8,
-    borderWidth: 1,
-    borderColor: '#000',
   },
   postCardTitle: {
     fontSize: 14,

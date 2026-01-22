@@ -17,7 +17,7 @@ const ExpoStorageAdapter = {
   getItem: async (key: string) => {
     try {
       const value = await AsyncStorage.getItem(key);
-      console.log('📦 Getting from storage:', key, value ? '✅ Found' : '❌ Not found');
+      // console.log('📦 Getting from storage:', key, value ? '✅ Found' : '❌ Not found');
       return value;
     } catch (error) {
       console.error('❌ Error getting from storage:', error);
@@ -27,7 +27,7 @@ const ExpoStorageAdapter = {
   setItem: async (key: string, value: string) => {
     try {
       await AsyncStorage.setItem(key, value);
-      console.log('💾 Saved to storage:', key);
+      // console.log('💾 Saved to storage:', key);
     } catch (error) {
       console.error('❌ Error saving to storage:', error);
     }
@@ -35,7 +35,7 @@ const ExpoStorageAdapter = {
   removeItem: async (key: string) => {
     try {
       await AsyncStorage.removeItem(key);
-      console.log('🗑️  Removed from storage:', key);
+      // console.log('🗑️  Removed from storage:', key);
     } catch (error) {
       console.error('❌ Error removing from storage:', error);
     }
@@ -100,21 +100,15 @@ export const signUpWithEmail = async (email: string, password: string) => {
     }
   });
   
-  console.log('📧 Signup response:', { 
-    hasUser: !!data.user, 
-    hasSession: !!data.session,
-    userId: data.user?.id 
-  });
-  
   // Wait for session to be established
   if (data.session) {
-    console.log('✅ Session found, setting it...');
+    // console.log('✅ Session found, setting it...');
     await supabase.auth.setSession({
       access_token: data.session.access_token,
       refresh_token: data.session.refresh_token,
     });
   } else {
-    console.log('⚠️  NO SESSION RETURNED! Email confirmation may be required.');
+    // console.log('⚠️  NO SESSION RETURNED! Email confirmation may be required.');
   }
   
   return { data, error };
@@ -144,11 +138,11 @@ export const getCurrentUser = async () => {
     }
     
     if (!session) {
-      console.log('📭 No session found in storage');
+      // console.log('📭 No session found in storage');
       return { user: null, error: null };
     }
     
-    console.log('✅ Session found:', session.user.id);
+    // console.log('✅ Session found:', session.user.id);
     return { user: session.user, error: null };
   } catch (error: any) {
     console.error('❌ Get current user error:', error);
@@ -160,11 +154,6 @@ export const getCurrentUser = async () => {
 export const createUserProfile = async (userId: string, profileData: Partial<UserProfile>) => {
   // Check session status
   const { data: { session } } = await supabase.auth.getSession();
-  console.log('🔐 Creating profile:', { 
-    userId, 
-    hasSession: !!session,
-    sessionUser: session?.user?.id 
-  });
   
   const { data, error } = await supabase
     .from('profiles')
@@ -182,7 +171,7 @@ export const createUserProfile = async (userId: string, profileData: Partial<Use
   if (error) {
     console.error('❌ Profile insert error:', error);
   } else {
-    console.log('✅ Profile created successfully!');
+    // console.log('✅ Profile created successfully!');
   }
   
   return { data, error };
@@ -291,9 +280,9 @@ export const getUserProfile = async (userId: string) => {
 // Get all user profiles (excluding current user, blocked users, and viewed profiles)
 export const getAllUserProfiles = async (excludeUserId?: string) => {
   try {
-    console.log('🔍 Fetching all user profiles...');
+    // console.log('🔍 Fetching all user profiles...');
     if (excludeUserId) {
-      console.log('🚫 Excluding user:', excludeUserId);
+      // console.log('🚫 Excluding user:', excludeUserId);
     }
     
     // Get blocked users list
@@ -305,10 +294,10 @@ export const getAllUserProfiles = async (excludeUserId?: string) => {
     const viewedIds = viewedProfiles || [];
     
     if (blockedIds.length > 0) {
-      console.log('🚫 Excluding blocked users:', blockedIds.length);
+      // console.log('🚫 Excluding blocked users:', blockedIds.length);
     }
     if (viewedIds.length > 0) {
-      console.log('👁️  Excluding viewed profiles:', viewedIds.length);
+      // console.log('👁️  Excluding viewed profiles:', viewedIds.length);
     }
     
     let query = supabase
@@ -342,9 +331,9 @@ export const getAllUserProfiles = async (excludeUserId?: string) => {
       !blockedIds.includes(profile.id) && !viewedIds.includes(profile.id)
     );
     
-    console.log(`✅ Fetched ${filteredData.length} user profiles (after filtering blocked and viewed users)`);
+    // console.log(`✅ Fetched ${filteredData.length} user profiles (after filtering blocked and viewed users)`);
     if (filteredData.length > 0) {
-      console.log('📋 Profile IDs:', filteredData.map((p: any) => p.id));
+      // console.log('📋 Profile IDs:', filteredData.map((p: any) => p.id));
     }
     return { data: filteredData, error: null };
   } catch (error: any) {
@@ -356,12 +345,12 @@ export const getAllUserProfiles = async (excludeUserId?: string) => {
 // Upload images to Supabase Storage
 export const uploadImage = async (userId: string, imageUri: string, imageName: string, folder: string = 'photos') => {
   try {
-    console.log('🔄 Starting upload:', imageName);
-    console.log('📍 File URI:', imageUri);
+    // console.log('🔄 Starting upload:', imageName);
+    // console.log('📍 File URI:', imageUri);
     
     // Skip upload if already a public URL (already uploaded)
     if (imageUri.startsWith('http://') || imageUri.startsWith('https://')) {
-      console.log('⚠️  Image already uploaded, skipping:', imageUri);
+      // console.log('⚠️  Image already uploaded, skipping:', imageUri);
       return { data: { path: imageUri, publicUrl: imageUri }, error: null };
     }
     
@@ -370,7 +359,7 @@ export const uploadImage = async (userId: string, imageUri: string, imageName: s
     const fileExtension = uriParts[uriParts.length - 1];
     const mimeType = `image/${fileExtension === 'png' ? 'png' : 'jpeg'}`;
     
-    console.log('📦 File type:', mimeType);
+    // console.log('📦 File type:', mimeType);
     
     // Generate unique filename with correct extension
     const timestamp = Date.now();
@@ -378,15 +367,15 @@ export const uploadImage = async (userId: string, imageUri: string, imageName: s
     const fileName = `photo_${timestamp}_${randomId}.${fileExtension}`;
     const filePath = `${folder}/${userId}/${fileName}`;
     
-    console.log('📤 Preparing upload to:', filePath);
-    console.log('🔄 Fetching file data from URI...');
+    // console.log('📤 Preparing upload to:', filePath);
+    // console.log('🔄 Fetching file data from URI...');
     
     // Fetch actual file data as ArrayBuffer (works in React Native)
     const response = await fetch(imageUri);
     const arrayBuffer = await response.arrayBuffer();
     
-    console.log('✅ ArrayBuffer created, size:', arrayBuffer.byteLength, 'bytes');
-    console.log('📤 Uploading to Supabase...');
+    // console.log('✅ ArrayBuffer created, size:', arrayBuffer.byteLength, 'bytes');
+    // console.log('📤 Uploading to Supabase...');
     
     // Upload ArrayBuffer to Supabase Storage
     const { data, error } = await supabase.storage
@@ -401,14 +390,14 @@ export const uploadImage = async (userId: string, imageUri: string, imageName: s
       return { data: null, error };
     }
     
-    console.log('✅ Upload successful:', filePath);
+    // console.log('✅ Upload successful:', filePath);
     
     // Get public URL
     const { data: publicUrlData } = supabase.storage
       .from('user-uploads')
       .getPublicUrl(filePath);
     
-    console.log('🌐 Public URL:', publicUrlData.publicUrl);
+    // console.log('🌐 Public URL:', publicUrlData.publicUrl);
     
     return { data: { path: filePath, publicUrl: publicUrlData.publicUrl }, error: null };
   } catch (error: any) {
@@ -471,7 +460,7 @@ export const likeUser = async (likedUserId: string) => {
     // Check for match in background (don't wait)
     checkForMatch(likerId, likedUserId).then(matchResult => {
       if (matchResult.data) {
-        console.log('🎉 Match found!', matchResult.data);
+        // console.log('🎉 Match found!', matchResult.data);
         // Match will be handled by trigger/event system
       }
     }).catch(err => {
@@ -522,7 +511,7 @@ export const passUser = async (passedUserId: string) => {
 
 export const checkForMatch = async (userId1: string, userId2: string) => {
   try {
-    console.log('🔍 Checking for match between:', userId1, 'and', userId2);
+    // console.log('🔍 Checking for match between:', userId1, 'and', userId2);
     
     // Check if user2 has also liked user1
     const { data: mutualLike, error } = await supabase
@@ -539,11 +528,11 @@ export const checkForMatch = async (userId1: string, userId2: string) => {
     }
 
     if (!mutualLike) {
-      console.log('❌ No mutual like found (no match)');
+      // console.log('❌ No mutual like found (no match)');
       return { data: null, error: null }; // No match
     }
 
-    console.log('✅ Mutual like found! Checking match record...');
+    // console.log('✅ Mutual like found! Checking match record...');
 
     // Match found! Try to get match record (might not exist yet if trigger hasn't fired)
     const { data: match, error: matchError } = await supabase
@@ -559,12 +548,12 @@ export const checkForMatch = async (userId1: string, userId2: string) => {
     }
 
     if (match) {
-      console.log('✅ Match record found:', match.id);
+      // console.log('✅ Match record found:', match.id);
       return { data: match, error: null };
     }
 
     // Match exists (mutual like) but record not created yet - trigger will create it
-    console.log('✅ Mutual like confirmed (match record pending)');
+    // console.log('✅ Mutual like confirmed (match record pending)');
     return { data: { id: 'pending', user1_id: userId1, user2_id: userId2 }, error: null };
   } catch (error: any) {
     console.error('❌ Exception in checkForMatch:', error);
@@ -685,7 +674,7 @@ export const blockUser = async (blockedUserId: string) => {
       .single();
 
     if (existingBlock) {
-      console.log('⚠️  User already blocked');
+      // console.log('⚠️  User already blocked');
       return { data: existingBlock, error: null };
     }
 
@@ -704,7 +693,7 @@ export const blockUser = async (blockedUserId: string) => {
       return { data: null, error };
     }
 
-    console.log('✅ User blocked successfully');
+    // console.log('✅ User blocked successfully');
     return { data, error: null };
   } catch (error: any) {
     console.error('❌ Exception in blockUser:', error);
@@ -732,7 +721,7 @@ export const unblockUser = async (blockedUserId: string) => {
       return { data: null, error };
     }
 
-    console.log('✅ User unblocked successfully');
+    // console.log('✅ User unblocked successfully');
     return { data: { success: true }, error: null };
   } catch (error: any) {
     console.error('❌ Exception in unblockUser:', error);
@@ -928,7 +917,7 @@ export const sendMessage = async (receiverId: string, matchId: string, content: 
       content: decryptMessage(data.content, encryptionKey),
     };
 
-    console.log('✅ Encrypted message sent successfully');
+    // console.log('✅ Encrypted message sent successfully');
     return { data: decryptedData, error: null };
   } catch (error: any) {
     console.error('❌ Exception in sendMessage:', error);
@@ -1167,7 +1156,7 @@ export const createPost = async (
 
       // Get the public URL from upload data
       imageUrl = uploadData.publicUrl || uploadData.path || null;
-      console.log('📸 Post image URL:', imageUrl);
+      // console.log('📸 Post image URL:', imageUrl);
     }
 
     // Validate: must have either image or description
@@ -1194,7 +1183,7 @@ export const createPost = async (
       return { data: null, error };
     }
 
-    console.log('✅ Post created successfully');
+    // console.log('✅ Post created successfully');
     return { data, error: null };
   } catch (error: any) {
     console.error('❌ Exception in createPost:', error);
@@ -1256,7 +1245,7 @@ export interface PostWithProfile extends Post {
 
 export const getAllPosts = async (excludeUserId?: string) => {
   try {
-    console.log('🔍 Fetching all posts...');
+    // console.log('🔍 Fetching all posts...');
     
     // Get blocked users list
     const { data: blockedUsers } = await getBlockedUsers();
@@ -1321,7 +1310,7 @@ export const getAllPosts = async (excludeUserId?: string) => {
       return !blockedIds.includes(userId) && !viewedIds.includes(userId);
     });
     
-    console.log(`✅ Loaded ${filteredPosts.length} posts`);
+    // console.log(`✅ Loaded ${filteredPosts.length} posts`);
     return { data: filteredPosts, error: null };
   } catch (error: any) {
     console.error('❌ Exception in getAllPosts:', error);

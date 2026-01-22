@@ -33,7 +33,7 @@ export function MatchPopup({
   onClose,
   onViewMatch,
 }: MatchPopupProps) {
-  console.log('🎨 MatchPopup render - visible:', visible, 'name:', matchedUserName);
+  // console.log('🎨 MatchPopup render - visible:', visible, 'name:', matchedUserName);
   
   const handleViewMatch = () => {
     onViewMatch();

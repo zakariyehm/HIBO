@@ -98,7 +98,7 @@ export default function LoginScreen() {
     setIsLoading(true);
 
     try {
-      console.log('🔐 Attempting login for:', email.trim());
+      // console.log('🔐 Attempting login for:', email.trim());
       
       // Sign in with Supabase
       const { data, error } = await signInWithEmail(email.trim(), password);
@@ -126,10 +126,10 @@ export default function LoginScreen() {
         return;
       }
 
-      console.log('✅ User authenticated:', data.user.id);
+      // console.log('✅ User authenticated:', data.user.id);
 
       // Check if user has a profile
-      console.log('📋 Checking for user profile...');
+      // console.log('📋 Checking for user profile...');
       const { data: profileData, error: profileError } = await getUserProfile(data.user.id);
 
       if (profileError || !profileData) {
@@ -144,13 +144,13 @@ export default function LoginScreen() {
       }
 
       // Success!
-      console.log('✅ Profile found! Logging in...');
-      console.log('👤 Welcome:', profileData.first_name, profileData.last_name);
+      // console.log('✅ Profile found! Logging in...');
+      // console.log('👤 Welcome:', profileData.first_name, profileData.last_name);
       showNotification(`Welcome back, ${profileData.first_name}!`, 'success');
       
       // Navigate to home after successful login
       setTimeout(() => {
-        console.log('🚀 Navigating to home screen...');
+        // console.log('🚀 Navigating to home screen...');
         router.replace('/(tabs)');
       }, 1000);
       

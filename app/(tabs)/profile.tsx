@@ -331,22 +331,22 @@ export default function ProfileScreen() {
       }
 
       if (data) {
-        console.log('✅ Post created:', data);
-        console.log('📸 Post image URL:', data.image_url);
+        // console.log('✅ Post created:', data);
+        // console.log('📸 Post image URL:', data.image_url);
         
         // Refetch posts to get the latest data with proper image URLs
         const { data: { session } } = await supabase.auth.getSession();
         if (session?.user) {
           const { data: refreshedPosts } = await getUserPosts(session.user.id);
           if (refreshedPosts) {
-            console.log('✅ Refreshed posts:', refreshedPosts.length);
+            // console.log('✅ Refreshed posts:', refreshedPosts.length);
             refreshedPosts.forEach((post: any, index: number) => {
-              console.log(`  Post ${index + 1}:`, post.id, 'Image:', post.image_url);
+              // console.log(`  Post ${index + 1}:`, post.id, 'Image:', post.image_url);
             });
             setPosts(refreshedPosts);
           } else {
             // Fallback: add the new post to the list
-            console.log('⚠️  Using fallback - adding post directly');
+            // console.log('⚠️  Using fallback - adding post directly');
             setPosts([data, ...posts]);
           }
         }
@@ -395,7 +395,7 @@ export default function ProfileScreen() {
     
     try {
       setSaving(true);
-      console.log('💾 Starting save process...');
+      // console.log('💾 Starting save process...');
       
       // Filter out placeholder photos and separate local vs remote
       let finalPhotoUrls = [...(editingProfile.photos || [])];
@@ -406,14 +406,14 @@ export default function ProfileScreen() {
         photo && (photo.startsWith('http') || photo.startsWith('https'))
       );
       
-      console.log('📊 Photos breakdown:');
-      console.log('  - Total:', finalPhotoUrls.length);
-      console.log('  - Local (need upload):', localPhotos.length);
-      console.log('  - Remote (already uploaded):', remotePhotos.length);
+      // console.log('📊 Photos breakdown:');
+      // console.log('  - Total:', finalPhotoUrls.length);
+      // console.log('  - Local (need upload):', localPhotos.length);
+      // console.log('  - Remote (already uploaded):', remotePhotos.length);
       
       // Upload local photos if any
       if (localPhotos.length > 0) {
-        console.log('📸 Uploading', localPhotos.length, 'new photos...');
+        // console.log('📸 Uploading', localPhotos.length, 'new photos...');
         
         const { data: uploadedUrls, error: uploadError } = await uploadPhotos(
           userProfile.id,
@@ -428,7 +428,7 @@ export default function ProfileScreen() {
         }
         
         if (uploadedUrls && uploadedUrls.length > 0) {
-          console.log('✅ Photos uploaded successfully:', uploadedUrls.length);
+          // console.log('✅ Photos uploaded successfully:', uploadedUrls.length);
           
           // Replace local URIs with uploaded URLs in the correct positions
           finalPhotoUrls = finalPhotoUrls.map(photo => {
@@ -456,8 +456,8 @@ export default function ProfileScreen() {
         return;
       }
       
-      console.log('📤 Saving profile with', finalPhotoUrls.length, 'photos');
-      console.log('📸 Final photo URLs:', finalPhotoUrls);
+      // console.log('📤 Saving profile with', finalPhotoUrls.length, 'photos');
+      // console.log('📸 Final photo URLs:', finalPhotoUrls);
       
       // Prepare all updated fields
       const updatedFields: any = {
@@ -487,7 +487,7 @@ export default function ProfileScreen() {
         updated_at: new Date().toISOString(),
       };
       
-      console.log('💾 Updating all profile fields...');
+      // console.log('💾 Updating all profile fields...');
       
       // Update profile in Supabase
       const { error: updateError } = await supabase
@@ -502,7 +502,7 @@ export default function ProfileScreen() {
         return;
       }
       
-      console.log('✅ Profile updated successfully in database');
+      // console.log('✅ Profile updated successfully in database');
       
       // Refetch profile from database to get latest data including bio_title
       const { data: { session } } = await supabase.auth.getSession();
@@ -567,7 +567,7 @@ export default function ProfileScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
-              console.log('🔓 Logging out...');
+              // console.log('🔓 Logging out...');
               const { error } = await signOut();
               
               if (error) {
@@ -576,7 +576,7 @@ export default function ProfileScreen() {
                 return;
               }
               
-              console.log('✅ Logged out successfully');
+              // console.log('✅ Logged out successfully');
               // Navigate to login screen
               router.replace('/login');
             } catch (error: any) {
@@ -607,14 +607,14 @@ export default function ProfileScreen() {
         }
         
         if (!session?.user) {
-          console.log('No authenticated user found');
+          // console.log('No authenticated user found');
           showToast('Please log in to view your profile', 'error');
           setLoading(false);
           return;
         }
         
         const userId = session.user.id;
-        console.log('📋 Fetching profile for user:', userId);
+        // console.log('📋 Fetching profile for user:', userId);
         
         // Fetch user profile from Supabase
         const { data: profileData, error: profileError } = await getUserProfile(userId);
@@ -627,8 +627,8 @@ export default function ProfileScreen() {
         }
         
         if (profileData) {
-          console.log('✅ Profile loaded successfully');
-          console.log('📸 Photos:', profileData.photos);
+          // console.log('✅ Profile loaded successfully');
+          // console.log('📸 Photos:', profileData.photos);
           
           // Filter out placeholder photos
           if (profileData.photos && profileData.photos.length > 0) {
@@ -639,10 +639,10 @@ export default function ProfileScreen() {
             );
             
             if (validPhotos.length > 0) {
-              console.log(`✅ Found ${validPhotos.length} valid photos`);
+              // console.log(`✅ Found ${validPhotos.length} valid photos`);
               profileData.photos = validPhotos;
             } else {
-              console.log('⚠️  No valid photos found (all placeholders)');
+              // console.log('⚠️  No valid photos found (all placeholders)');
               profileData.photos = [];
             }
           }
@@ -655,7 +655,7 @@ export default function ProfileScreen() {
             setPosts(postsData);
           }
         } else {
-          console.log('⚠️  No profile data found for this user');
+          // console.log('⚠️  No profile data found for this user');
           showToast('No profile data found. Please complete onboarding.', 'error');
         }
         
@@ -1415,7 +1415,7 @@ export default function ProfileScreen() {
                           console.error('❌ Error loading post image:', post.image_url, error);
                         }}
                         onLoad={() => {
-                          console.log('✅ Post image loaded:', post.image_url);
+                          // console.log('✅ Post image loaded:', post.image_url);
                         }}
                       />
                     </View>

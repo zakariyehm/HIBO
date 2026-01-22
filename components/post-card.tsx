@@ -93,7 +93,7 @@ export function PostCard({
         if (session?.user && userId) {
           checkForMatch(session.user.id, userId).then((matchResult: any) => {
             if (matchResult.data) {
-              console.log('🎉 MATCH FOUND!');
+              // console.log('🎉 MATCH FOUND!');
               setShowMatchPopup(true);
             }
           }).catch((err: any) => {
@@ -338,7 +338,7 @@ export function PostCard({
         matchedUserName={profileName}
         matchedUserPhoto={imageArray.length > 0 ? imageArray[0] : undefined}
         onClose={() => {
-          console.log('🚪 Closing match popup - removing card');
+          // console.log('🚪 Closing match popup - removing card');
           setShowMatchPopup(false);
           // Remove card after popup closes
           if (onLike && userId) {
@@ -346,7 +346,7 @@ export function PostCard({
           }
         }}
         onViewMatch={() => {
-          console.log('👀 View match pressed - removing card');
+          // console.log('👀 View match pressed - removing card');
           setShowMatchPopup(false);
           // Remove card after navigating
           if (onLike && userId) {
@@ -595,10 +595,12 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   bioText: {
-    fontSize: 20,
+    fontSize: 32,
     color: Colors.textDark,
     fontWeight: '700',
-    lineHeight: 28,
+    lineHeight: 42,
+    letterSpacing: -0.5,
+    fontFamily: 'serif',
   },
   postTextContainer: {
     marginBottom: 12,

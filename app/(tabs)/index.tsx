@@ -50,12 +50,12 @@ export default function HomeScreen() {
   const handleAppStateChange = (nextAppState: AppStateStatus) => {
     if (appState.current.match(/inactive|background/) && nextAppState === 'active') {
       // App came to foreground
-      console.log('📱 App came to foreground - updating active status');
+      // console.log('📱 App came to foreground - updating active status');
       updateCurrentUserActive();
       startActiveStatusUpdates();
     } else if (nextAppState.match(/inactive|background/)) {
       // App went to background
-      console.log('📱 App went to background - stopping active status updates');
+      // console.log('📱 App went to background - stopping active status updates');
       stopActiveStatusUpdates();
     }
     
@@ -115,7 +115,7 @@ export default function HomeScreen() {
         const { data: currentUserProfile } = await getUserProfile(user.id);
         if (currentUserProfile?.interested_in) {
           currentUserInterest = currentUserProfile.interested_in;
-          console.log(`👤 Current user interested in: ${currentUserInterest}`);
+          // console.log(`👤 Current user interested in: ${currentUserInterest}`);
         }
       }
 
@@ -152,10 +152,10 @@ export default function HomeScreen() {
             // Default: don't show profiles if preference not recognized
             return false;
           });
-          console.log(`🎯 Filtered by interest "${currentUserInterest}": ${validProfiles.length} profiles`);
+          // console.log(`🎯 Filtered by interest "${currentUserInterest}": ${validProfiles.length} profiles`);
         }
         
-        console.log(`✅ Loaded ${validProfiles.length} user profiles`);
+        // console.log(`✅ Loaded ${validProfiles.length} user profiles`);
         
         // Sort profiles: Active users first, then by last_active, then by created_at
         const profiles = (validProfiles as UserProfile[]).sort((a, b) => {
@@ -181,7 +181,7 @@ export default function HomeScreen() {
         
         setUserProfiles(profiles);
       } else {
-        console.log('⚠️  No user profiles found');
+        // console.log('⚠️  No user profiles found');
         setUserProfiles([]);
       }
       
@@ -193,11 +193,11 @@ export default function HomeScreen() {
   };
 
   const handleShare = () => {
-    console.log('Share pressed');
+    // console.log('Share pressed');
   };
 
   const handleComment = () => {
-    console.log('Comment pressed');
+    // console.log('Comment pressed');
   };
 
   // Calculate time ago
@@ -220,7 +220,7 @@ export default function HomeScreen() {
         title="For you"
         onActionPress={() => {
           // Handle action button press (e.g., create new post)
-          console.log('Action button pressed');
+          // console.log('Action button pressed');
         }}
         actionIcon="add-outline"
       />

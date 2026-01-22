@@ -19,28 +19,28 @@ export default function Index() {
 
   const checkAuthStatus = async () => {
     try {
-      console.log('🔍 Checking authentication status...');
+      // console.log('🔍 Checking authentication status...');
       const { user, error } = await getCurrentUser();
 
       if (error || !user) {
-        console.log('❌ No authenticated user found');
+        // console.log('❌ No authenticated user found');
         setIsAuthenticated(false);
         setIsCheckingAuth(false);
         return;
       }
 
-      console.log('✅ User authenticated:', user.id);
+      // console.log('✅ User authenticated:', user.id);
 
       // Check if user has a profile
       const { data: profileData, error: profileError } = await getUserProfile(user.id);
 
       if (profileError || !profileData) {
-        console.log('⚠️  Profile not found, redirecting to onboarding');
+        // console.log('⚠️  Profile not found, redirecting to onboarding');
         // User authenticated but no profile - they should complete onboarding
         // But for now, we'll log them out and redirect to welcome
         setIsAuthenticated(false);
       } else {
-        console.log('✅ Profile found, redirecting to home');
+        // console.log('✅ Profile found, redirecting to home');
         setIsAuthenticated(true);
       }
 

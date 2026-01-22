@@ -5,17 +5,17 @@ import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
 import {
-    ActivityIndicator,
-    Image,
-    Keyboard,
-    KeyboardAvoidingView,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Image,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -69,7 +69,7 @@ export default function ChatScreen() {
   useEffect(() => {
     if (!matchId || !currentUserId) return;
 
-    console.log('🔔 Setting up real-time subscription for match:', matchId);
+    // console.log('🔔 Setting up real-time subscription for match:', matchId);
 
     // Subscribe to new messages for this match
     const channel = supabase
@@ -83,7 +83,7 @@ export default function ChatScreen() {
           filter: `match_id=eq.${matchId}`,
         },
         async (payload) => {
-          console.log('📨 New message received:', payload.new);
+          // console.log('📨 New message received:', payload.new);
           
           // Get match info to decrypt the message
           const { data: match } = await supabase
@@ -118,12 +118,12 @@ export default function ChatScreen() {
         }
       )
       .subscribe((status) => {
-        console.log('📡 Subscription status:', status);
+        // console.log('📡 Subscription status:', status);
       });
 
     // Cleanup subscription on unmount
     return () => {
-      console.log('🔕 Unsubscribing from real-time updates');
+      // console.log('🔕 Unsubscribing from real-time updates');
       supabase.removeChannel(channel);
     };
   }, [matchId, currentUserId]);

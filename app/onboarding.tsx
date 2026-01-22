@@ -696,7 +696,7 @@ const OnboardingScreen = () => {
       const userId = authData.user.id;
 
       // Wait for session to be fully established
-      console.log('✅ Account created! Waiting for session...');
+      // console.log('✅ Account created! Waiting for session...');
       await new Promise(resolve => setTimeout(resolve, 1000));
 
       // Step 2: Upload photos to Supabase Storage
@@ -709,7 +709,7 @@ const OnboardingScreen = () => {
       }
       
       // Upload photos to Supabase Storage
-      console.log('📸 Uploading', onboardingData.photos.length, 'photos...');
+      // console.log('📸 Uploading', onboardingData.photos.length, 'photos...');
       
       const { data: photoData, error: photoError } = await uploadPhotos(userId, onboardingData.photos);
       
@@ -746,12 +746,12 @@ const OnboardingScreen = () => {
       }
       
       const uploadedPhotoUrls = photoData as string[];
-      console.log('✅ Photos uploaded successfully!', uploadedPhotoUrls.length, 'photos');
-      console.log('📸 Photo URLs:', uploadedPhotoUrls);
+      // console.log('✅ Photos uploaded successfully!', uploadedPhotoUrls.length, 'photos');
+      // console.log('📸 Photo URLs:', uploadedPhotoUrls);
 
       // Step 3: Upload documents to Supabase Storage
       let documentUrls: Record<string, string> = {};
-      console.log('📄 Uploading documents...');
+      // console.log('📄 Uploading documents...');
       
       if (onboardingData.passport) {
         const { data: passportData, error: passportError } = await uploadDocument(userId, onboardingData.passport, `passport_${Date.now()}.jpg`);
@@ -759,7 +759,7 @@ const OnboardingScreen = () => {
           console.error('❌ Passport upload error:', passportError);
         } else if (passportData?.publicUrl) {
           documentUrls.passport = passportData.publicUrl;
-          console.log('✅ Passport uploaded');
+          // console.log('✅ Passport uploaded');
         }
       }
       
@@ -769,7 +769,7 @@ const OnboardingScreen = () => {
           console.error('❌ Driver license front upload error:', dlFrontError);
         } else if (dlFrontData?.publicUrl) {
           documentUrls.driver_license_front = dlFrontData.publicUrl;
-          console.log('✅ Driver license front uploaded');
+          // console.log('✅ Driver license front uploaded');
         }
       }
       
@@ -779,7 +779,7 @@ const OnboardingScreen = () => {
           console.error('❌ Driver license back upload error:', dlBackError);
         } else if (dlBackData?.publicUrl) {
           documentUrls.driver_license_back = dlBackData.publicUrl;
-          console.log('✅ Driver license back uploaded');
+          // console.log('✅ Driver license back uploaded');
         }
       }
       
@@ -789,7 +789,7 @@ const OnboardingScreen = () => {
           console.error('❌ Nationality ID front upload error:', nidFrontError);
         } else if (nidFrontData?.publicUrl) {
           documentUrls.nationality_id_front = nidFrontData.publicUrl;
-          console.log('✅ Nationality ID front uploaded');
+          // console.log('✅ Nationality ID front uploaded');
         }
       }
       
@@ -799,7 +799,7 @@ const OnboardingScreen = () => {
           console.error('❌ Nationality ID back upload error:', nidBackError);
         } else if (nidBackData?.publicUrl) {
           documentUrls.nationality_id_back = nidBackData.publicUrl;
-          console.log('✅ Nationality ID back uploaded');
+          // console.log('✅ Nationality ID back uploaded');
         }
       }
 
@@ -844,12 +844,12 @@ const OnboardingScreen = () => {
       }
 
       // Success!
-      console.log('🎉 Profile creation complete! Navigating to home...');
+      // console.log('🎉 Profile creation complete! Navigating to home...');
       setAccountLoading(false);
       setProfileCreated(true);
       
       // Navigate to home immediately
-      console.log('🚀 Attempting navigation to home screen...');
+      // console.log('🚀 Attempting navigation to home screen...');
         router.replace('/(tabs)');
       
     } catch (error: any) {

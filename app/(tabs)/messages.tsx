@@ -65,7 +65,7 @@ export default function MessagesScreen() {
   useEffect(() => {
     if (!currentUserId) return;
 
-    console.log('🔔 Setting up real-time subscription for all messages');
+    // console.log('🔔 Setting up real-time subscription for all messages');
 
     // Subscribe to all message changes
     const channel = supabase
@@ -78,7 +78,7 @@ export default function MessagesScreen() {
           table: 'messages',
         },
         async (payload) => {
-          console.log('📨 New message received in list:', payload.new);
+          // console.log('📨 New message received in list:', payload.new);
           
           // Refresh conversations silently in background (no loading)
           await fetchConversations(false);
@@ -92,19 +92,19 @@ export default function MessagesScreen() {
           table: 'messages',
         },
         async (payload) => {
-          console.log('📝 Message updated:', payload.new);
+          // console.log('📝 Message updated:', payload.new);
           
           // Refresh conversations silently when messages are marked as read
           await fetchConversations(false);
         }
       )
       .subscribe((status) => {
-        console.log('📡 Messages list subscription status:', status);
+        // console.log('📡 Messages list subscription status:', status);
       });
 
     // Cleanup subscription on unmount
     return () => {
-      console.log('🔕 Unsubscribing from messages list updates');
+      // console.log('🔕 Unsubscribing from messages list updates');
       supabase.removeChannel(channel);
     };
   }, [currentUserId]);

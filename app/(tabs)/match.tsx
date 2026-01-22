@@ -57,7 +57,7 @@ export default function MatchScreen() {
       if (data) {
         // Filter out matches with null profiles
         const validMatches = data.filter((m: MatchProfile) => m.profile !== null);
-        console.log(`✅ Loaded ${validMatches.length} matches`);
+        // console.log(`✅ Loaded ${validMatches.length} matches`);
         setMatches(validMatches);
       }
 
