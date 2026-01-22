@@ -107,6 +107,41 @@ export default function ProfileScreen() {
     setToastVisible(true);
   };
 
+  // Helper function to extract image URL from various formats
+  const getImageUrl = (imageUrl: any): string | null => {
+    if (!imageUrl) return null;
+    
+    // If it's already a string URL
+    if (typeof imageUrl === 'string') {
+      // Check if it's a JSON string that needs parsing
+      const trimmed = imageUrl.trim();
+      if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+        try {
+          const parsed = JSON.parse(trimmed);
+          return parsed.publicUrl || parsed.path || null;
+        } catch {
+          // If parsing fails, check if it's a valid URL
+          if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+            return trimmed;
+          }
+          return null;
+        }
+      }
+      // If it's a valid URL string, return it
+      if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+        return trimmed;
+      }
+      return null;
+    }
+    
+    // If it's an object, extract publicUrl or path
+    if (typeof imageUrl === 'object' && imageUrl !== null) {
+      return imageUrl.publicUrl || imageUrl.path || null;
+    }
+    
+    return null;
+  };
+
   // Count emojis in a string
   const countEmojis = (text: string): number => {
     // Emoji regex pattern covering most common emoji ranges
@@ -1405,25 +1440,28 @@ export default function ProfileScreen() {
                   )}
                   
                   {/* Image or Description */}
-                  {post.image_url ? (
-                    <View style={styles.postCardImageContainer}>
-                      <Image
-                        source={{ uri: post.image_url }}
-                        style={styles.postCardImage}
-                        contentFit="cover"
-                        onError={(error) => {
-                          console.error('❌ Error loading post image:', post.image_url, error);
-                        }}
-                        onLoad={() => {
-                          // console.log('✅ Post image loaded:', post.image_url);
-                        }}
-                      />
-                    </View>
-                  ) : post.description ? (
-                    <View style={styles.postCardDescriptionContainer}>
-                      <Text style={styles.postCardDescription}>{post.description}</Text>
-                    </View>
-                  ) : null}
+                  {(() => {
+                    const imageUri = getImageUrl(post.image_url);
+                    return imageUri ? (
+                      <View style={styles.postCardImageContainer}>
+                        <Image
+                          source={{ uri: imageUri }}
+                          style={styles.postCardImage}
+                          contentFit="cover"
+                          onError={(error) => {
+                            console.error('❌ Error loading post image:', post.image_url, error);
+                          }}
+                          onLoad={() => {
+                            // console.log('✅ Post image loaded:', imageUri);
+                          }}
+                        />
+                      </View>
+                    ) : post.description ? (
+                      <View style={styles.postCardDescriptionContainer}>
+                        <Text style={styles.postCardDescription}>{post.description}</Text>
+                      </View>
+                    ) : null;
+                  })()}
 
                   {/* Delete button - only in edit mode */}
                   {activeTab === 'edit' && (

@@ -1,10 +1,10 @@
 import { AppHeader } from '@/components/app-header';
 import { PostCard } from '@/components/post-card';
 import { Colors } from '@/constants/theme';
-import { getAllUserProfiles, getCurrentUser, getUserProfile, updateLastActive } from '@/lib/supabase';
+import { getAllUserProfiles, getCurrentUser, getUserProfile, supabase, updateLastActive } from '@/lib/supabase';
 import { useFocusEffect } from 'expo-router';
-import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, AppState, AppStateStatus, ScrollView, StatusBar, StyleSheet, Text, View } from 'react-native';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, AppState, AppStateStatus, RefreshControl, ScrollView, StatusBar, StyleSheet, Text, View } from 'react-native';
 
 interface UserProfile {
   id: string;
@@ -24,10 +24,12 @@ interface UserProfile {
 export default function HomeScreen() {
   const [userProfiles, setUserProfiles] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
   const appState = useRef(AppState.currentState);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const statusRefreshRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     fetchUserProfiles();
@@ -43,6 +45,9 @@ export default function HomeScreen() {
       subscription.remove();
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
+      }
+      if (statusRefreshRef.current) {
+        clearInterval(statusRefreshRef.current);
       }
     };
   }, []);
@@ -81,6 +86,62 @@ export default function HomeScreen() {
     }
   };
 
+  // Real-time subscription for profile updates (last_active changes) - Professional like WhatsApp
+  useEffect(() => {
+    if (userProfiles.length === 0) return;
+
+    // console.log('🔔 Setting up real-time subscription for profile status updates');
+
+    // Subscribe to profile updates (especially last_active changes)
+    const channel = supabase
+      .channel('profiles-status-updates')
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'profiles',
+        },
+        (payload) => {
+          // Update the specific profile's last_active in the list
+          if (payload.new && payload.old) {
+            const updatedProfile = payload.new as any;
+            const profileId = updatedProfile.id;
+
+            // Only update if last_active changed
+            if (updatedProfile.last_active !== payload.old.last_active) {
+              setUserProfiles((prev) =>
+                prev.map((profile) =>
+                  profile.id === profileId
+                    ? { ...profile, last_active: updatedProfile.last_active }
+                    : profile
+                )
+              );
+            }
+          }
+        }
+      )
+      .subscribe((status) => {
+        // console.log('📡 Profile status subscription status:', status);
+      });
+
+    // Periodic status refresh - Update status display every 10 seconds (like WhatsApp)
+    // This ensures "Online" status updates accurately when users go offline
+    statusRefreshRef.current = setInterval(() => {
+      // Trigger re-render by updating state (status is calculated client-side)
+      setUserProfiles((prev) => [...prev]);
+    }, 10000); // 10 seconds
+
+    // Cleanup subscription on unmount
+    return () => {
+      // console.log('🔕 Unsubscribing from profile status updates');
+      supabase.removeChannel(channel);
+      if (statusRefreshRef.current) {
+        clearInterval(statusRefreshRef.current);
+      }
+    };
+  }, [userProfiles.length]);
+
   // Refresh feed when screen comes into focus (e.g., after viewing a profile)
   useFocusEffect(
     React.useCallback(() => {
@@ -97,9 +158,11 @@ export default function HomeScreen() {
     }
   };
 
-  const fetchUserProfiles = async () => {
+  const fetchUserProfiles = async (isRefresh = false) => {
     try {
-      setLoading(true);
+      if (!isRefresh) {
+        setLoading(true);
+      }
       
       // Get current user to exclude from list and get their preferences
       const { user } = await getCurrentUser();
@@ -124,7 +187,9 @@ export default function HomeScreen() {
 
       if (error) {
         console.error('❌ Error fetching profiles:', error);
-        setLoading(false);
+        if (!isRefresh) {
+          setLoading(false);
+        }
         return;
       }
 
@@ -185,12 +250,22 @@ export default function HomeScreen() {
         setUserProfiles([]);
       }
       
-      setLoading(false);
+      if (!isRefresh) {
+        setLoading(false);
+      }
     } catch (error) {
       console.error('❌ Error in fetchUserProfiles:', error);
-      setLoading(false);
+      if (!isRefresh) {
+        setLoading(false);
+      }
     }
   };
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await fetchUserProfiles(true);
+    setRefreshing(false);
+  }, []);
 
   const handleShare = () => {
     // console.log('Share pressed');
@@ -242,6 +317,15 @@ export default function HomeScreen() {
           style={styles.scrollView}
           contentContainerStyle={styles.contentContainer}
           showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor={Colors.primary}
+              colors={[Colors.primary]}
+              progressBackgroundColor={Colors.background}
+            />
+          }
         >
           {userProfiles.map((profile, index) => {
             const fullName = profile.first_name;
