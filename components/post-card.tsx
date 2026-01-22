@@ -1,6 +1,6 @@
 import { MatchPopup } from '@/components/MatchPopup';
 import { Colors } from '@/constants/theme';
-import { blockUser, checkForMatch, likeUser, passUser, recordProfileView, supabase } from '@/lib/supabase';
+import { blockUser, checkForMatch, getUserStatus, likeUser, passUser, recordProfileView, supabase } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useState } from 'react';
@@ -14,6 +14,7 @@ interface PostCardProps {
   location: string;
   username: string;
   timeAgo: string;
+  lastActive?: string | null; // Last active timestamp
   profileImage?: string;
   postImage?: string;
   photos?: string[]; // Array of photos for swiper
@@ -36,6 +37,7 @@ export function PostCard({
   location,
   username,
   timeAgo,
+  lastActive,
   profileImage,
   postImage,
   photos,
@@ -51,6 +53,7 @@ export function PostCard({
   onPass,
   onBlock,
 }: PostCardProps) {
+  const { text: statusText, isOnline } = getUserStatus(lastActive);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [showMenu, setShowMenu] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false); // Single state for both actions
@@ -137,14 +140,22 @@ export function PostCard({
         {/* Profile Header Section */}
         <View style={styles.profileHeader}>
           <View style={styles.profileInfo}>
-            <View style={styles.profileRow}>
+            <View style={isOnline ? styles.profileRowOnline : styles.profileRow}>
               <Text style={styles.profileName}>{profileName}</Text>
-              <View style={styles.dot} />
-              <Text style={styles.location}>{location}</Text>
+              {isOnline ? (
+                <>
+                  <View style={styles.onlineDot} />
+                  <Text style={[styles.statusText, styles.onlineText]}>Online</Text>
+                </>
+              ) : (
+                <>
+                  <View style={styles.dot} />
+                  <Text style={styles.statusText}>{statusText || location}</Text>
+                </>
+              )}
             </View>
             <View style={styles.userInfo}>
-              <Text style={styles.username}>{username}</Text>
-              <Text style={styles.timeAgo}>{timeAgo}</Text>
+              <Text style={styles.locationText}>{location}</Text>
             </View>
           </View>
           <View style={styles.headerActions}>
@@ -378,6 +389,12 @@ const styles = StyleSheet.create({
     marginBottom: 4,
     gap: 6,
   },
+  profileRowOnline: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+    gap: 4,
+  },
   profileName: {
     fontSize: 28,
     fontWeight: 'bold',
@@ -388,6 +405,24 @@ const styles = StyleSheet.create({
     height: 4,
     borderRadius: 2,
     backgroundColor: Colors.iconLight,
+  },
+  onlineDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#4CAF50', // Green for online
+    marginRight: 4,
+    borderWidth: 1.5,
+    borderColor: Colors.cardBackground,
+  },
+  statusText: {
+    fontSize: 12,
+    color: Colors.textLight,
+    fontWeight: '400',
+  },
+  onlineText: {
+    color: '#4CAF50',
+    fontWeight: '500',
   },
   location: {
     fontSize: 12,
@@ -401,13 +436,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
   },
-  username: {
+  locationText: {
     fontSize: 14,
     color: Colors.textLight,
-  },
-  timeAgo: {
-    fontSize: 14,
-    color: Colors.textLight,
+    fontWeight: '400',
   },
   headerActions: {
     flexDirection: 'row',

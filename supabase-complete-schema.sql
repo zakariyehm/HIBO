@@ -45,6 +45,7 @@ CREATE TABLE IF NOT EXISTS profiles (
   national_id_number TEXT,
   bio TEXT NOT NULL,
   bio_title TEXT, -- Added for Hinge-style bio titles
+  last_active TIMESTAMPTZ DEFAULT NOW(), -- Track when user was last active
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -55,6 +56,7 @@ CREATE INDEX IF NOT EXISTS idx_profiles_gender ON profiles(gender);
 CREATE INDEX IF NOT EXISTS idx_profiles_location ON profiles(location);
 CREATE INDEX IF NOT EXISTS idx_profiles_age ON profiles(age);
 CREATE INDEX IF NOT EXISTS idx_profiles_created_at ON profiles(created_at);
+CREATE INDEX IF NOT EXISTS idx_profiles_last_active ON profiles(last_active DESC);
 
 -- RLS Policies for profiles
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
@@ -94,6 +96,21 @@ CREATE TRIGGER update_profiles_updated_at
 BEFORE UPDATE ON profiles
 FOR EACH ROW
 EXECUTE FUNCTION update_updated_at_column();
+
+-- Function to update last_active timestamp
+CREATE OR REPLACE FUNCTION update_last_active()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.last_active = NOW();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Trigger to auto-update last_active when profile is updated
+CREATE TRIGGER update_profile_last_active
+BEFORE UPDATE ON profiles
+FOR EACH ROW
+EXECUTE FUNCTION update_last_active();
 
 -- ============================================================================
 -- 2. STORAGE BUCKET (For photos and documents)

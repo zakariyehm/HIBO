@@ -188,6 +188,82 @@ export const createUserProfile = async (userId: string, profileData: Partial<Use
   return { data, error };
 };
 
+// Update user's last_active timestamp (call when user is active)
+export const updateLastActive = async (userId: string) => {
+  try {
+    const { error } = await supabase
+      .from('profiles')
+      .update({ last_active: new Date().toISOString() })
+      .eq('id', userId);
+    
+    if (error) {
+      console.error('❌ Error updating last_active:', error);
+      return { error };
+    }
+    
+    return { error: null };
+  } catch (error: any) {
+    console.error('❌ Exception updating last_active:', error);
+    return { error };
+  }
+};
+
+// Check if user is online (actively using app - within last 1 minute)
+export const isUserOnline = (lastActive: string | null | undefined): boolean => {
+  if (!lastActive) return false;
+  
+  const lastActiveTime = new Date(lastActive).getTime();
+  const now = new Date().getTime();
+  const oneMinuteAgo = now - (1 * 60 * 1000); // 1 minute in milliseconds
+  
+  return lastActiveTime >= oneMinuteAgo;
+};
+
+// Get professional status text (short format: Online, 1m, 1h, 24h, etc.)
+export const getUserStatus = (lastActive: string | null | undefined): { text: string; isOnline: boolean } => {
+  if (!lastActive) {
+    return { text: '', isOnline: false };
+  }
+  
+  const isOnline = isUserOnline(lastActive);
+  
+  if (isOnline) {
+    return { text: 'Online', isOnline: true };
+  }
+  
+  // Calculate time difference
+  const lastActiveTime = new Date(lastActive).getTime();
+  const now = new Date().getTime();
+  const diffInSeconds = Math.floor((now - lastActiveTime) / 1000);
+  
+  // Less than 1 minute
+  if (diffInSeconds < 60) {
+    return { text: '1m', isOnline: false };
+  }
+  
+  // Less than 1 hour
+  if (diffInSeconds < 3600) {
+    const minutes = Math.floor(diffInSeconds / 60);
+    return { text: `${minutes}m`, isOnline: false };
+  }
+  
+  // Less than 24 hours
+  if (diffInSeconds < 86400) {
+    const hours = Math.floor(diffInSeconds / 3600);
+    return { text: `${hours}h`, isOnline: false };
+  }
+  
+  // Less than 7 days
+  if (diffInSeconds < 604800) {
+    const days = Math.floor(diffInSeconds / 86400);
+    return { text: `${days}d`, isOnline: false };
+  }
+  
+  // More than 7 days
+  const weeks = Math.floor(diffInSeconds / 604800);
+  return { text: `${weeks}w`, isOnline: false };
+};
+
 export const updateUserProfile = async (userId: string, profileData: Partial<UserProfile>) => {
   const { data, error } = await supabase
     .from('profiles')
@@ -237,7 +313,8 @@ export const getAllUserProfiles = async (excludeUserId?: string) => {
     
     let query = supabase
       .from('profiles')
-      .select('id, first_name, last_name, location, bio, bio_title, photos, nationality, gender, interested_in, created_at')
+      .select('id, first_name, last_name, location, bio, bio_title, photos, nationality, gender, interested_in, created_at, last_active')
+      .order('last_active', { ascending: false, nullsLast: true })
       .order('created_at', { ascending: false });
     
     // Exclude current user if provided

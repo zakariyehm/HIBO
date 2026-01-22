@@ -1,10 +1,10 @@
 import { AppHeader } from '@/components/app-header';
 import { PostCard } from '@/components/post-card';
 import { Colors } from '@/constants/theme';
-import { getAllUserProfiles, getCurrentUser, getUserProfile } from '@/lib/supabase';
+import { getAllUserProfiles, getCurrentUser, getUserProfile, updateLastActive } from '@/lib/supabase';
 import { useFocusEffect } from 'expo-router';
-import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, ScrollView, StatusBar, StyleSheet, Text, View } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, AppState, AppStateStatus, ScrollView, StatusBar, StyleSheet, Text, View } from 'react-native';
 
 interface UserProfile {
   id: string;
@@ -18,6 +18,7 @@ interface UserProfile {
   gender?: string;
   interested_in?: string;
   created_at: string;
+  last_active?: string | null;
 }
 
 export default function HomeScreen() {
@@ -25,16 +26,76 @@ export default function HomeScreen() {
   const [loading, setLoading] = useState(true);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
+  const appState = useRef(AppState.currentState);
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+
   useEffect(() => {
     fetchUserProfiles();
+    updateCurrentUserActive();
+    
+    // Listen to app state changes (foreground/background)
+    const subscription = AppState.addEventListener('change', handleAppStateChange);
+    
+    // Update last_active every 15 seconds when app is active
+    startActiveStatusUpdates();
+    
+    return () => {
+      subscription.remove();
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+      }
+    };
   }, []);
+
+  const handleAppStateChange = (nextAppState: AppStateStatus) => {
+    if (appState.current.match(/inactive|background/) && nextAppState === 'active') {
+      // App came to foreground
+      console.log('📱 App came to foreground - updating active status');
+      updateCurrentUserActive();
+      startActiveStatusUpdates();
+    } else if (nextAppState.match(/inactive|background/)) {
+      // App went to background
+      console.log('📱 App went to background - stopping active status updates');
+      stopActiveStatusUpdates();
+    }
+    
+    appState.current = nextAppState;
+  };
+
+  const startActiveStatusUpdates = () => {
+    // Clear any existing interval
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+    }
+    
+    // Update every 15 seconds when app is active (like WhatsApp)
+    intervalRef.current = setInterval(() => {
+      updateCurrentUserActive();
+    }, 15000); // 15 seconds
+  };
+
+  const stopActiveStatusUpdates = () => {
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+  };
 
   // Refresh feed when screen comes into focus (e.g., after viewing a profile)
   useFocusEffect(
     React.useCallback(() => {
       fetchUserProfiles();
+      updateCurrentUserActive(); // Update when screen comes into focus
     }, [])
   );
+
+  // Update current user's active status
+  const updateCurrentUserActive = async () => {
+    const { user } = await getCurrentUser();
+    if (user) {
+      await updateLastActive(user.id);
+    }
+  };
 
   const fetchUserProfiles = async () => {
     try {
@@ -44,6 +105,8 @@ export default function HomeScreen() {
       const { user } = await getCurrentUser();
       if (user) {
         setCurrentUserId(user.id);
+        // Update current user's last_active when they open the app
+        await updateLastActive(user.id);
       }
 
       // Get current user's profile to check their interest preference
@@ -93,7 +156,29 @@ export default function HomeScreen() {
         }
         
         console.log(`✅ Loaded ${validProfiles.length} user profiles`);
-        const profiles = validProfiles as UserProfile[];
+        
+        // Sort profiles: Active users first, then by last_active, then by created_at
+        const profiles = (validProfiles as UserProfile[]).sort((a, b) => {
+          const aActive = a.last_active ? new Date(a.last_active).getTime() : 0;
+          const bActive = b.last_active ? new Date(b.last_active).getTime() : 0;
+          const now = Date.now();
+          const oneMinute = 1 * 60 * 1000; // 1 minute for online status (like WhatsApp)
+          
+          const aIsOnline = aActive > (now - oneMinute);
+          const bIsOnline = bActive > (now - oneMinute);
+          
+          // Online users first
+          if (aIsOnline && !bIsOnline) return -1;
+          if (!aIsOnline && bIsOnline) return 1;
+          
+          
+          // Then by last_active (most recent first)
+          if (aActive !== bActive) return bActive - aActive;
+          
+          // Finally by created_at
+          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+        });
+        
         setUserProfiles(profiles);
       } else {
         console.log('⚠️  No user profiles found');
@@ -171,6 +256,7 @@ export default function HomeScreen() {
                   location={profile.location}
                   username={username}
                   timeAgo={getTimeAgo(profile.created_at)}
+                  lastActive={profile.last_active}
                   profileImage={mainPhoto}
                   photos={profile.photos} // Pass all photos for swiper
                   bio_title={profile.bio_title}
