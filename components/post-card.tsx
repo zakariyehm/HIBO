@@ -471,7 +471,7 @@ const styles = StyleSheet.create({
   },
   postImage: {
     width: SCREEN_WIDTH,
-    height: 400,
+    height: 500,
     resizeMode: 'cover',
     borderRadius: 16,
     borderWidth: 0.5,
