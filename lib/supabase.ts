@@ -1059,13 +1059,18 @@ export const upgradeToPremium = async () => {
   }
 };
 
-// Create subscription with plan type (monthly or yearly)
+// Payment method: Hormuud (mobile money), Apple Pay, Google Pay
+export type PaymentMethod = 'hormuud' | 'apple_pay' | 'google_pay';
+
+// Create subscription with plan type (monthly or yearly) and payment method
 export const createSubscription = async ({
   planType,
   phoneNumber,
+  paymentMethod = 'hormuud',
 }: {
   planType: 'monthly' | 'yearly';
   phoneNumber: string;
+  paymentMethod?: PaymentMethod;
 }) => {
   try {
     const { data: { session } } = await supabase.auth.getSession();
@@ -1088,6 +1093,9 @@ export const createSubscription = async ({
       expiresAt.setFullYear(expiresAt.getFullYear() + 1);
     }
 
+    // subscription_phone: Hormuud = number; Apple/Google Pay = null
+    const subscriptionPhone = paymentMethod === 'hormuud' ? phoneNumber : null;
+
     // Update profile with subscription info
     const { data, error } = await supabase
       .from('profiles')
@@ -1095,7 +1103,7 @@ export const createSubscription = async ({
         is_premium: true,
         premium_expires_at: expiresAt.toISOString(),
         subscription_type: planType,
-        subscription_phone: phoneNumber,
+        subscription_phone: subscriptionPhone,
         subscription_start_date: trialEndDate.toISOString(), // Billing starts after trial
         updated_at: new Date().toISOString(),
       })

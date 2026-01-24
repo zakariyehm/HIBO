@@ -160,9 +160,12 @@
 - ❌ **Notification Badges** - Unread count on tabs
 
 #### 11. **PAYMENT INTEGRATION**
-- ❌ **Stripe Integration** - Credit card payments
-- ❌ **Apple Pay** - iOS payment method
-- ❌ **Google Pay** - Android payment method
+
+**HIBO** will use **3 payment methods**: Hormuud, Apple Pay, and Google Pay.
+
+- ❌ **Hormuud** - Mobile money / Hormuud (primary)
+- ❌ **Apple Pay** - iOS
+- ❌ **Google Pay** - Android
 - ❌ **Subscription Management** - Cancel, renew, change plan
 - ❌ **Payment History** - View past transactions
 
