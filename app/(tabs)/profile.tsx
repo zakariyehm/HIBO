@@ -718,17 +718,35 @@ export default function ProfileScreen() {
 
   if (loading) {
     return (
-      <View style={[styles.container, { paddingTop: insets.top }]}>
-        <View style={[styles.topHeader, Platform.OS === 'android' && { paddingTop: 10 }]}>
-          <Text style={styles.headerButtonText}>Cancel</Text>
-          <Text style={styles.headerName}>Profile</Text>
-          <Text style={styles.headerButtonText}>Done</Text>
+      <ScrollView
+        style={{ flex: 1, backgroundColor: Colors.background }}
+        contentContainerStyle={{ padding: 16 }}
+      >
+        {/* Skeleton Header */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 20, gap: 12 }}>
+          <View style={{ width: 80, height: 80, borderRadius: 40, backgroundColor: Colors.borderLight }} />
+          <View style={{ flex: 1, gap: 8 }}>
+            <View style={{ width: '60%', height: 20, borderRadius: 4, backgroundColor: Colors.borderLight }} />
+            <View style={{ width: '40%', height: 16, borderRadius: 4, backgroundColor: Colors.borderLight }} />
+          </View>
         </View>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={theme.black} />
-          <Text style={styles.loadingText}>Loading profile...</Text>
+        
+        {/* Skeleton Photos */}
+        <View style={{ flexDirection: 'row', gap: 12, marginBottom: 20 }}>
+          {[1, 2, 3].map((i) => (
+            <View key={i} style={{ width: 100, height: 100, borderRadius: 8, backgroundColor: Colors.borderLight }} />
+          ))}
         </View>
-      </View>
+        
+        {/* Skeleton Content */}
+        <View style={{ gap: 12 }}>
+          {[1, 2, 3, 4].map((i) => (
+            <View key={i} style={{ width: '100%', height: 16, borderRadius: 4, backgroundColor: Colors.borderLight }} />
+          ))}
+        </View>
+        
+        <ActivityIndicator size="large" color={Colors.primary} style={{ marginTop: 40 }} />
+      </ScrollView>
     );
   }
 

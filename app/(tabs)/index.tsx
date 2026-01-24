@@ -1,7 +1,8 @@
 import { AppHeader } from '@/components/app-header';
 import { PostCard } from '@/components/post-card';
+import { PostCardSkeleton } from '@/components/SkeletonLoader';
 import { Colors } from '@/constants/theme';
-import { getAllUserProfiles, getCurrentUser, getUserProfile, getUserPrompts, isPremiumUser, supabase, updateLastActive } from '@/lib/supabase';
+import { canLikeUser, getAllUserProfiles, getCurrentUser, getDailyLikeCount, getUserProfile, getUserPrompts, isPremiumUser, supabase, updateLastActive } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
@@ -41,6 +42,9 @@ export default function HomeScreen() {
   const [showLimitModal, setShowLimitModal] = useState(false);
   const [matchLimitInfo, setMatchLimitInfo] = useState<{ waitingCount: number; limit: number } | null>(null);
   const [isPremium, setIsPremium] = useState(false);
+  const [likeCount, setLikeCount] = useState({ remaining: Infinity, limit: Infinity });
+  const [showLikeLimitModal, setShowLikeLimitModal] = useState(false);
+  const [likeLimitInfo, setLikeLimitInfo] = useState<{ remaining: number; limit: number } | null>(null);
 
   const appState = useRef(AppState.currentState);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -108,12 +112,18 @@ export default function HomeScreen() {
   useEffect(() => {
     fetchUserProfiles();
     updateCurrentUserActive();
+    updateLikeCount();
     
     // Listen to app state changes (foreground/background)
     const subscription = AppState.addEventListener('change', handleAppStateChange);
     
     // Update last_active every 15 seconds when app is active
     startActiveStatusUpdates();
+    
+    // Update like count every minute
+    const likeCountInterval = setInterval(() => {
+      updateLikeCount();
+    }, 60000); // Every minute
     
     return () => {
       subscription.remove();
@@ -123,8 +133,14 @@ export default function HomeScreen() {
       if (statusRefreshRef.current) {
         clearInterval(statusRefreshRef.current);
       }
+      clearInterval(likeCountInterval);
     };
   }, []);
+
+  const updateLikeCount = async () => {
+    const likeInfo = await canLikeUser();
+    setLikeCount({ remaining: likeInfo.remaining, limit: likeInfo.limit });
+  };
 
   const handleAppStateChange = (nextAppState: AppStateStatus) => {
     if (appState.current.match(/inactive|background/) && nextAppState === 'active') {
@@ -238,12 +254,19 @@ export default function HomeScreen() {
         setLoading(true);
       }
       
-      // Get current user to exclude from list and get their preferences
-      const { user } = await getCurrentUser();
+      // Get current user and profile in parallel for faster loading
+      const [userResult, premiumResult] = await Promise.all([
+        getCurrentUser(),
+        isPremiumUser(),
+      ]);
+      
+      const { user } = userResult;
+      setIsPremium(premiumResult);
+      
       if (user) {
         setCurrentUserId(user.id);
-        // Update current user's last_active when they open the app
-        await updateLastActive(user.id);
+        // Update current user's last_active in background (non-blocking)
+        updateLastActive(user.id).catch(() => {});
       }
 
       // Get current user's profile to check their interest preference
@@ -252,11 +275,10 @@ export default function HomeScreen() {
         const { data: currentUserProfile } = await getUserProfile(user.id);
         if (currentUserProfile?.interested_in) {
           currentUserInterest = currentUserProfile.interested_in;
-          // console.log(`👤 Current user interested in: ${currentUserInterest}`);
         }
       }
 
-      // Fetch all user profiles (excluding current user)
+      // Fetch all user profiles (excluding current user) - OPTIMIZED
       const { data, error } = await getAllUserProfiles(user?.id);
 
       if (error) {
@@ -294,25 +316,31 @@ export default function HomeScreen() {
           // console.log(`🎯 Filtered by interest "${currentUserInterest}": ${validProfiles.length} profiles`);
         }
         
-        // Sort profiles: Active users first, then by last_active, then by created_at
+        // Smart Algorithm: Sort profiles by compatibility and activity (Tinder-style)
         const profiles = (validProfiles as UserProfile[]).sort((a, b) => {
           const aActive = a.last_active ? new Date(a.last_active).getTime() : 0;
           const bActive = b.last_active ? new Date(b.last_active).getTime() : 0;
           const now = Date.now();
-          const oneMinute = 1 * 60 * 1000; // 1 minute for online status (like WhatsApp)
+          const oneMinute = 1 * 60 * 1000; // 1 minute for online status
+          const oneDay = 24 * 60 * 60 * 1000; // 24 hours for active status
           
           const aIsOnline = aActive > (now - oneMinute);
           const bIsOnline = bActive > (now - oneMinute);
+          const aIsActive = aActive > (now - oneDay);
+          const bIsActive = bActive > (now - oneDay);
           
-          // Online users first
+          // Priority 1: Online users first (HIGHEST PRIORITY)
           if (aIsOnline && !bIsOnline) return -1;
           if (!aIsOnline && bIsOnline) return 1;
           
+          // Priority 2: Active users (within 24 hours)
+          if (aIsActive && !bIsActive) return -1;
+          if (!aIsActive && bIsActive) return 1;
           
-          // Then by last_active (most recent first)
+          // Priority 3: Most recently active (within same category)
           if (aActive !== bActive) return bActive - aActive;
           
-          // Finally by created_at
+          // Priority 4: Newest profiles (recently joined)
           return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
         });
         
@@ -368,6 +396,22 @@ export default function HomeScreen() {
     return `${Math.floor(diffInSeconds / 604800)}w`;
   };
 
+  // Get time until midnight (for like limit reset)
+  const getTimeUntilMidnight = () => {
+    const now = new Date();
+    const midnight = new Date();
+    midnight.setHours(24, 0, 0, 0);
+    
+    const diffMs = midnight.getTime() - now.getTime();
+    const hours = Math.floor(diffMs / (1000 * 60 * 60));
+    const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+    
+    if (hours > 0) {
+      return `${hours}h ${minutes}m`;
+    }
+    return `${minutes}m`;
+  };
+
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" />
@@ -381,10 +425,16 @@ export default function HomeScreen() {
       />
       
       {loading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={Colors.primary} />
-          <Text style={styles.loadingText}>Loading profiles...</Text>
-        </View>
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.contentContainer}
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Tinder-style skeleton loaders */}
+          {[1, 2, 3].map((i) => (
+            <PostCardSkeleton key={i} />
+          ))}
+        </ScrollView>
       ) : userProfiles.length === 0 ? (
         <View style={styles.emptyContainer}>
           <Text style={styles.emptyText}>No profiles found</Text>
@@ -432,8 +482,20 @@ export default function HomeScreen() {
                   onShare={handleShare}
                   onComment={handleComment}
                   onLike={async (userId) => {
-                    // Check limit before allowing like
-                    const { checkMatchLimit } = await import('@/lib/supabase');
+                    // Check daily like limit first
+                    const canLike = await canLikeUser();
+                    if (!canLike.canLike) {
+                      // Show daily like limit modal (upgrade popup)
+                      setLikeLimitInfo({
+                        remaining: canLike.remaining,
+                        limit: canLike.limit,
+                      });
+                      setShowLikeLimitModal(true);
+                      return; // Don't remove from list, don't like
+                    }
+                    
+                    // Check match limit before allowing like
+                    const { checkMatchLimit, likeUser } = await import('@/lib/supabase');
                     const limitCheck = await checkMatchLimit();
                     
                     if (limitCheck.reached) {
@@ -445,6 +507,33 @@ export default function HomeScreen() {
                       setShowLimitModal(true);
                       return; // Don't remove from list, don't like
                     }
+                    
+                    // Perform the like operation
+                    const likeResult = await likeUser(userId);
+                    
+                    // If there's an error, show appropriate modal
+                    if (likeResult.error) {
+                      if (likeResult.error.message === 'DAILY_LIKE_LIMIT_REACHED') {
+                        setLikeLimitInfo({
+                          remaining: likeResult.error.remaining || 0,
+                          limit: likeResult.error.limit || 1,
+                        });
+                        setShowLikeLimitModal(true);
+                        return;
+                      }
+                      if (likeResult.error.message === 'MATCH_LIMIT_REACHED') {
+                        setMatchLimitInfo({
+                          waitingCount: limitCheck.waitingCount,
+                          limit: limitCheck.limit,
+                        });
+                        setShowLimitModal(true);
+                        return;
+                      }
+                      return; // Don't remove card on error
+                    }
+                    
+                    // Update like count after successful like
+                    updateLikeCount();
                     
                     // Remove liked user from the list
                     setUserProfiles(prev => prev.filter(p => p.id !== userId));
@@ -729,6 +818,74 @@ export default function HomeScreen() {
         </View>
       </Modal>
 
+      {/* Daily Like Limit Modal */}
+      <Modal
+        visible={showLikeLimitModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowLikeLimitModal(false)}
+      >
+        <View style={styles.limitModalOverlay}>
+          <View style={styles.limitModalContent}>
+            <View style={styles.limitModalHeader}>
+              <Ionicons name="heart-outline" size={32} color={Colors.primary} />
+              <Text style={styles.limitModalTitle}>Daily Like Limit Reached</Text>
+            </View>
+            
+            {likeLimitInfo && (
+              <>
+                <View style={styles.progressBarContainer}>
+                  <View style={styles.progressBarBackground}>
+                    <View 
+                      style={[
+                        styles.progressBarFill, 
+                        { width: '100%', backgroundColor: Colors.primary }
+                      ]} 
+                    />
+                  </View>
+                  <Text style={styles.progressText}>
+                    {likeLimitInfo.limit} / {likeLimitInfo.limit} likes used today
+                  </Text>
+                </View>
+                
+                <Text style={styles.limitModalText}>
+                  You've used all {likeLimitInfo.limit} of your daily likes. 
+                  Upgrade to Premium for unlimited likes!
+                </Text>
+                
+                <View style={styles.resetTimerContainer}>
+                  <Ionicons name="time-outline" size={20} color={Colors.textLight} />
+                  <Text style={styles.resetTimerText}>
+                    Resets in {getTimeUntilMidnight()}
+                  </Text>
+                </View>
+              </>
+            )}
+            
+            <View style={styles.limitModalActions}>
+              <TouchableOpacity
+                style={[styles.limitModalButton, styles.premiumButton]}
+                onPress={() => {
+                  setShowLikeLimitModal(false);
+                  router.push('/premium');
+                }}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="star" size={20} color={Colors.cardBackground} />
+                <Text style={styles.limitModalButtonText}>Upgrade to Premium</Text>
+              </TouchableOpacity>
+            </View>
+
+            <TouchableOpacity
+              style={styles.limitModalClose}
+              onPress={() => setShowLikeLimitModal(false)}
+            >
+              <Text style={styles.limitModalCloseText}>Maybe Later</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
       {/* Match Limit Blocking Modal (Tinder/Hinge style) */}
       <Modal
         visible={showLimitModal}
@@ -990,7 +1147,7 @@ const styles = StyleSheet.create({
   },
   limitModalContent: {
     backgroundColor: Colors.cardBackground,
-    borderRadius: 20,
+    borderRadius: 8,
     padding: 24,
     width: '100%',
     maxWidth: 400,
@@ -1046,6 +1203,57 @@ const styles = StyleSheet.create({
   },
   limitModalCloseText: {
     fontSize: 15,
+    color: Colors.textLight,
+    fontWeight: '500',
+  },
+  likeCounterContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    backgroundColor: Colors.background,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.borderLight,
+    gap: 8,
+  },
+  likeCounterText: {
+    fontSize: 14,
+    color: Colors.textDark,
+    fontWeight: '600',
+  },
+  progressBarContainer: {
+    marginVertical: 20,
+    width: '100%',
+  },
+  progressBarBackground: {
+    width: '100%',
+    height: 8,
+    backgroundColor: Colors.borderLight,
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
+  progressBarFill: {
+    height: '100%',
+    backgroundColor: Colors.primary,
+  },
+  progressText: {
+    fontSize: 14,
+    color: Colors.textLight,
+    textAlign: 'center',
+    marginTop: 8,
+    fontWeight: '500',
+  },
+  resetTimerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: 12,
+    paddingVertical: 8,
+  },
+  resetTimerText: {
+    fontSize: 14,
     color: Colors.textLight,
     fontWeight: '500',
   },

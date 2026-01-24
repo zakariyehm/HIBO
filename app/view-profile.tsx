@@ -2,9 +2,10 @@
  * View Profile Screen - Display another user's full profile
  */
 
+import { MatchPopup } from '@/components/MatchPopup';
 import { Toast } from '@/components/Toast';
 import { Colors } from '@/constants/theme';
-import { blockUser, getCurrentUser, getUserPosts, getUserProfile, getUserPrompts, isUserBlocked, Post, recordProfileView } from '@/lib/supabase';
+import { blockUser, checkForMatch, getCurrentUser, getUserPosts, getUserProfile, getUserPrompts, isPremiumUser, isUserBlocked, likeUser, passUser, Post, recordProfileView } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -64,6 +65,9 @@ export default function ViewProfileScreen() {
   const [isCurrentUser, setIsCurrentUser] = useState(false);
   const [posts, setPosts] = useState<Post[]>([]);
   const [prompts, setPrompts] = useState<Array<{ question: string; answer: string }>>([]);
+  const [isPremium, setIsPremium] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [showMatchPopup, setShowMatchPopup] = useState(false);
 
   const showToast = (message: string, type: 'info' | 'error' | 'success' = 'info') => {
     setToastMessage(message);
@@ -75,6 +79,7 @@ export default function ViewProfileScreen() {
     if (userId) {
       checkIfCurrentUser();
       checkIfBlocked();
+      checkPremiumStatus();
       fetchProfile();
       fetchPosts();
       // Record that this profile was viewed (like Tinder - once viewed, don't show again)
@@ -84,6 +89,11 @@ export default function ViewProfileScreen() {
       setLoading(false);
     }
   }, [userId]);
+
+  const checkPremiumStatus = async () => {
+    const premium = await isPremiumUser();
+    setIsPremium(premium);
+  };
 
   const checkIfCurrentUser = async () => {
     const { user } = await getCurrentUser();
@@ -167,10 +177,31 @@ export default function ViewProfileScreen() {
           </View>
           <View style={styles.placeholder} />
         </View>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={Colors.primary} />
-          <Text style={styles.loadingText}>Loading profile...</Text>
-        </View>
+        <ScrollView 
+          style={styles.loadingContainer} 
+          contentContainerStyle={styles.loadingContentContainer}
+        >
+          {/* Skeleton Header */}
+          <View style={styles.skeletonHeader}>
+            <View style={styles.skeletonAvatar} />
+            <View style={styles.skeletonHeaderText}>
+              <View style={styles.skeletonTitle} />
+              <View style={styles.skeletonSubtitle} />
+            </View>
+          </View>
+          
+          {/* Skeleton Image */}
+          <View style={styles.skeletonImage} />
+          
+          {/* Skeleton Content */}
+          <View style={styles.skeletonContent}>
+            <View style={styles.skeletonLine} />
+            <View style={[styles.skeletonLine, { width: '80%' }]} />
+            <View style={[styles.skeletonLine, { width: '60%' }]} />
+          </View>
+          
+          <ActivityIndicator size="large" color={Colors.primary} style={{ marginTop: 20 }} />
+        </ScrollView>
       </View>
     );
   }
@@ -231,6 +262,101 @@ export default function ViewProfileScreen() {
         },
       ]
     );
+  };
+
+  const handleLike = async () => {
+    if (!userId || isProcessing || isCurrentUser) return;
+    
+    if (!isPremium) {
+      Alert.alert(
+        'Premium Required',
+        'You need a premium subscription to like users. Upgrade to unlock unlimited likes and matches.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { 
+            text: 'Upgrade', 
+            onPress: () => router.push('/premium') 
+          },
+        ]
+      );
+      return;
+    }
+
+    // INSTANT feedback and navigation (Tinder-style - no delay!)
+    showToast('Liked!', 'success');
+    
+    // Navigate back immediately (no setTimeout delay)
+    router.back();
+    
+    // Set processing briefly to prevent double-tap
+    setIsProcessing(true);
+    setTimeout(() => setIsProcessing(false), 100);
+    
+    // ALL operations in background - completely non-blocking
+    Promise.all([
+      // Like user
+      likeUser(userId).then((likeResult) => {
+        if (likeResult.error) {
+          if (likeResult.error.message === 'MATCH_LIMIT_REACHED') {
+            // This shouldn't happen for premium users
+            return;
+          }
+        } else {
+          // Check for match in background
+          getCurrentUser().then(({ user }) => {
+            if (user) {
+              checkForMatch(user.id, userId).then((matchResult) => {
+                if (matchResult.data) {
+                  setShowMatchPopup(true);
+                }
+              }).catch((err) => {
+                console.error('❌ Error checking match:', err);
+              });
+            }
+          });
+        }
+      }),
+      // Record profile view
+      recordProfileView(userId)
+    ]).catch((error) => {
+      console.error('❌ Error in handleLike:', error);
+    });
+  };
+
+  const handlePass = async () => {
+    if (!userId || isProcessing || isCurrentUser) return;
+    
+    if (!isPremium) {
+      Alert.alert(
+        'Premium Required',
+        'You need a premium subscription to use this feature. Upgrade to unlock all features.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { 
+            text: 'Upgrade', 
+            onPress: () => router.push('/premium') 
+          },
+        ]
+      );
+      return;
+    }
+
+    setIsProcessing(true);
+    try {
+      await passUser(userId);
+      showToast('Passed', 'info');
+      
+      // Navigate back after pass
+      setTimeout(() => {
+        router.back();
+      }, 500);
+      
+      setIsProcessing(false);
+    } catch (error) {
+      console.error('❌ Error passing user:', error);
+      showToast('An error occurred', 'error');
+      setIsProcessing(false);
+    }
   };
 
   const fullName = `${profile.first_name || ''} ${profile.last_name || ''}`.trim();
@@ -468,6 +594,20 @@ export default function ViewProfileScreen() {
         )}
       </ScrollView>
 
+      <MatchPopup
+        visible={showMatchPopup}
+        matchedUserName={profile ? `${profile.first_name} ${profile.last_name}` : 'Someone'}
+        matchedUserPhoto={profile?.photos?.[0]}
+        onClose={() => {
+          setShowMatchPopup(false);
+          router.back();
+        }}
+        onViewMatch={() => {
+          setShowMatchPopup(false);
+          router.push('/(tabs)/match');
+        }}
+      />
+
       <Toast
         visible={toastVisible}
         message={toastMessage}
@@ -521,9 +661,10 @@ const styles = StyleSheet.create({
   },
   loadingContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 12,
+    backgroundColor: Colors.background,
+  },
+  loadingContentContainer: {
+    padding: 16,
   },
   loadingText: {
     fontSize: 16,
@@ -704,6 +845,110 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: Colors.textDark,
     lineHeight: 24,
+  },
+  actionButtonsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 24,
+    paddingHorizontal: 32,
+    paddingTop: 16,
+    backgroundColor: white,
+    borderTopWidth: 1,
+    borderTopColor: Colors.borderLight,
+  },
+  passButton: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#F5F5F5',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: Colors.borderLight,
+  },
+  likeButton: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: Colors.primary || '#FF6B6B',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  premiumRequiredContainer: {
+    paddingHorizontal: 32,
+    paddingTop: 16,
+    backgroundColor: white,
+    borderTopWidth: 1,
+    borderTopColor: Colors.borderLight,
+    alignItems: 'center',
+    gap: 12,
+  },
+  premiumRequiredText: {
+    fontSize: 14,
+    color: Colors.textLight,
+    textAlign: 'center',
+  },
+  upgradeButton: {
+    backgroundColor: Colors.textDark,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 8,
+  },
+  upgradeButtonText: {
+    color: white,
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  skeletonHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 20,
+    gap: 12,
+  },
+  skeletonAvatar: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: Colors.borderLight,
+  },
+  skeletonHeaderText: {
+    flex: 1,
+    gap: 8,
+  },
+  skeletonTitle: {
+    width: '60%',
+    height: 20,
+    borderRadius: 4,
+    backgroundColor: Colors.borderLight,
+  },
+  skeletonSubtitle: {
+    width: '40%',
+    height: 16,
+    borderRadius: 4,
+    backgroundColor: Colors.borderLight,
+  },
+  skeletonImage: {
+    width: '100%',
+    height: 400,
+    borderRadius: 12,
+    backgroundColor: Colors.borderLight,
+    marginBottom: 20,
+  },
+  skeletonContent: {
+    gap: 12,
+    marginBottom: 20,
+  },
+  skeletonLine: {
+    width: '100%',
+    height: 16,
+    borderRadius: 4,
+    backgroundColor: Colors.borderLight,
   },
 });
 

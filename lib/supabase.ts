@@ -88,6 +88,9 @@ export interface UserProfile {
   bio_title?: string;
   is_premium?: boolean;
   premium_expires_at?: string;
+  subscription_type?: 'monthly' | 'yearly';
+  subscription_phone?: string;
+  subscription_start_date?: string;
   last_active?: string;
   created_at?: string;
   updated_at?: string;
@@ -304,6 +307,10 @@ export const getAllUserProfiles = async (excludeUserId?: string) => {
       // console.log('👁️  Excluding viewed profiles:', viewedIds.length);
     }
     
+    // Smart algorithm: Sort by compatibility and activity
+    // 1. Active users first (last_active within 24 hours)
+    // 2. Then by last_active (most recent first)
+    // 3. Then by created_at (newest profiles first)
     let query = supabase
       .from('profiles')
       .select('id, first_name, last_name, location, bio, bio_title, photos, nationality, gender, interested_in, age, height, education_level, interests, personality, created_at, last_active')
@@ -443,9 +450,16 @@ export const checkMatchLimit = async (): Promise<{ reached: boolean; waitingCoun
 
     const userId = session.user.id;
     
-    // Check premium status
+    // Check premium status - Premium users get UNLIMITED matches
     const premium = await isPremiumUser();
-    const LIMIT = premium ? 15 : 7;
+    
+    // Premium users have unlimited matches - no limit check needed
+    if (premium) {
+      return { reached: false, waitingCount: 0, limit: Infinity };
+    }
+    
+    // Free users have limit of 7
+    const LIMIT = 7;
 
     // Get active matches waiting for reply (no messages sent)
     const { data: matches } = await supabase
@@ -472,6 +486,61 @@ export const checkMatchLimit = async (): Promise<{ reached: boolean; waitingCoun
   }
 };
 
+// Get daily like count for current user
+export const getDailyLikeCount = async (): Promise<{ count: number; limit: number }> => {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) {
+      return { count: 0, limit: 1 }; // Default to free user limit
+    }
+
+    const premium = await isPremiumUser();
+    
+    // Premium users have 2 likes per day
+    const limit = premium ? 2 : 1;
+
+    // Get today's like count
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayStart = today.toISOString();
+    
+    const { count, error } = await supabase
+      .from('daily_likes')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', session.user.id)
+      .gte('created_at', todayStart);
+
+    if (error) {
+      console.error('❌ Error getting daily like count:', error);
+      return { count: 0, limit };
+    }
+
+    return { count: count || 0, limit };
+  } catch (error) {
+    console.error('❌ Exception in getDailyLikeCount:', error);
+    const premium = await isPremiumUser().catch(() => false);
+    return { count: 0, limit: premium ? 2 : 1 };
+  }
+};
+
+// Check if user can like (hasn't reached daily limit)
+export const canLikeUser = async (): Promise<{ canLike: boolean; remaining: number; limit: number }> => {
+  try {
+    const { count, limit } = await getDailyLikeCount();
+    const remaining = limit - count;
+    
+    return {
+      canLike: remaining > 0,
+      remaining: Math.max(0, remaining),
+      limit,
+    };
+  } catch (error) {
+    console.error('❌ Exception in canLikeUser:', error);
+    const premium = await isPremiumUser().catch(() => false);
+    return { canLike: false, remaining: 0, limit: premium ? 2 : 1 };
+  }
+};
+
 export const likeUser = async (likedUserId: string) => {
   try {
     const { data: { session } } = await supabase.auth.getSession();
@@ -479,22 +548,94 @@ export const likeUser = async (likedUserId: string) => {
       return { data: null, error: { message: 'Not authenticated' } };
     }
 
-    // Check match limit before allowing like (Tinder/Hinge style)
-    const limitCheck = await checkMatchLimit();
-    if (limitCheck.reached) {
+    const likerId = session.user.id;
+    
+    // Check premium status
+    const premium = await isPremiumUser();
+    
+    // Check daily like limit for all users (Premium: 2, Free: 1)
+    const canLike = await canLikeUser();
+    if (!canLike.canLike) {
       return { 
         data: null, 
         error: { 
-          message: 'MATCH_LIMIT_REACHED',
-          waitingCount: limitCheck.waitingCount,
-          limit: limitCheck.limit,
+          message: 'DAILY_LIKE_LIMIT_REACHED',
+          remaining: canLike.remaining,
+          limit: canLike.limit,
         } 
       };
     }
+    
+    // Check match limit for free users only
+    if (!premium) {
+      const limitCheck = await checkMatchLimit();
+      if (limitCheck.reached) {
+        return { 
+          data: null, 
+          error: { 
+            message: 'MATCH_LIMIT_REACHED',
+            waitingCount: limitCheck.waitingCount,
+            limit: limitCheck.limit,
+          } 
+        };
+      }
+    }
 
-    const likerId = session.user.id;
+    // IMPORTANT: Track daily like FIRST before inserting into likes table
+    // This ensures the limit is enforced at the database level (via trigger)
+    const { error: dailyLikeError } = await supabase
+      .from('daily_likes')
+      .insert({
+        user_id: likerId,
+        liked_user_id: likedUserId,
+        created_at: new Date().toISOString(),
+      });
 
-    // Use upsert for faster operation (no need to check first)
+    // If daily_likes insert fails, don't proceed with like
+    if (dailyLikeError) {
+      // Check if it's a duplicate (already liked today)
+      if (dailyLikeError.code === '23505') {
+        // Duplicate like - user already liked this person today
+        return { 
+          data: null, 
+          error: { 
+            message: 'ALREADY_LIKED_TODAY',
+          } 
+        };
+      }
+      
+      // Check if it's a trigger error (limit reached)
+      if (dailyLikeError.message && dailyLikeError.message.includes('Daily like limit reached')) {
+        // Database trigger blocked the insert - limit reached
+        const recheck = await canLikeUser();
+        return { 
+          data: null, 
+          error: { 
+            message: 'DAILY_LIKE_LIMIT_REACHED',
+            remaining: recheck.remaining,
+            limit: recheck.limit,
+          } 
+        };
+      }
+      
+      // Other error - re-check limit in case it was reached between check and insert
+      console.error('❌ Error tracking daily like:', dailyLikeError);
+      const recheck = await canLikeUser();
+      if (!recheck.canLike) {
+        return { 
+          data: null, 
+          error: { 
+            message: 'DAILY_LIKE_LIMIT_REACHED',
+            remaining: recheck.remaining,
+            limit: recheck.limit,
+          } 
+        };
+      }
+      
+      return { data: null, error: dailyLikeError };
+    }
+
+    // Now insert into likes table (daily_likes was successful)
     const { data, error } = await supabase
       .from('likes')
       .upsert({
@@ -510,13 +651,22 @@ export const likeUser = async (likedUserId: string) => {
 
     if (error) {
       console.error('❌ Error liking user:', error);
+      // Rollback: Remove the daily_likes entry if likes insert failed
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      await supabase
+        .from('daily_likes')
+        .delete()
+        .eq('user_id', likerId)
+        .eq('liked_user_id', likedUserId)
+        .gte('created_at', today.toISOString());
+      
       return { data: null, error };
     }
 
-    // Check for match in background (don't wait)
+    // Check for match in background (non-blocking - don't wait)
     checkForMatch(likerId, likedUserId).then(matchResult => {
       if (matchResult.data) {
-        // console.log('🎉 Match found!', matchResult.data);
         // Match will be handled by trigger/event system
       }
     }).catch(err => {
@@ -847,6 +997,62 @@ export const upgradeToPremium = async () => {
     return { data, error: null };
   } catch (error: any) {
     console.error('❌ Exception in upgradeToPremium:', error);
+    return { data: null, error };
+  }
+};
+
+// Create subscription with plan type (monthly or yearly)
+export const createSubscription = async ({
+  planType,
+  phoneNumber,
+}: {
+  planType: 'monthly' | 'yearly';
+  phoneNumber: string;
+}) => {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) {
+      return { data: null, error: { message: 'Not authenticated' } };
+    }
+
+    const userId = session.user.id;
+    const now = new Date();
+    
+    // Calculate expiration date based on plan type
+    // For testing: 3 days free trial, then subscription starts
+    const trialEndDate = new Date(now);
+    trialEndDate.setDate(trialEndDate.getDate() + 3); // 3-day free trial
+    
+    const expiresAt = new Date(trialEndDate);
+    if (planType === 'monthly') {
+      expiresAt.setMonth(expiresAt.getMonth() + 1);
+    } else {
+      expiresAt.setFullYear(expiresAt.getFullYear() + 1);
+    }
+
+    // Update profile with subscription info
+    const { data, error } = await supabase
+      .from('profiles')
+      .update({
+        is_premium: true,
+        premium_expires_at: expiresAt.toISOString(),
+        subscription_type: planType,
+        subscription_phone: phoneNumber,
+        subscription_start_date: trialEndDate.toISOString(), // Billing starts after trial
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', userId)
+      .select()
+      .single();
+
+    if (error) {
+      console.error('❌ Error creating subscription:', error);
+      return { data: null, error };
+    }
+
+    return { data, error: null };
+  } catch (error: any) {
+    console.error('❌ Exception in createSubscription:', error);
     return { data: null, error };
   }
 };

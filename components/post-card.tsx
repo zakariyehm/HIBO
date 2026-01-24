@@ -27,7 +27,7 @@ interface PostCardProps {
   userId?: string; // User ID for profile navigation
   onShare?: () => void;
   onComment?: () => void;
-  onLike?: (userId: string) => void; // Callback when user is liked
+  onLike?: (userId: string) => Promise<void> | void; // Callback when user is liked
   onPass?: (userId: string) => void; // Callback when user is passed
   onBlock?: (userId: string) => void; // Callback when user is blocked
 }
@@ -85,49 +85,65 @@ export function PostCard({
 
   const handleLike = async () => {
     if (!userId || isProcessing) return;
-    setIsProcessing(true);
-
-    // Check limit first (Tinder/Hinge style - block if limit reached)
-    const likeResult = await likeUser(userId);
     
-    if (likeResult.error) {
-      // If limit reached, don't remove card - let parent handle modal
-      if (likeResult.error.message === 'MATCH_LIMIT_REACHED') {
-        setIsProcessing(false);
-        // Parent component will show blocking modal
-        return;
-      }
-      
-      console.error('❌ Error liking user:', likeResult.error);
-      setIsProcessing(false);
+    // Set processing state briefly to prevent double-tap
+    setIsProcessing(true);
+    setTimeout(() => setIsProcessing(false), 100);
+
+    // IMPORTANT: Let parent component handle like limit check and show modal
+    // Call parent's onLike callback which will check limits and show upgrade popup
+    if (onLike) {
+      await onLike(userId);
+      // If parent didn't remove the card (limit reached), don't proceed
+      // Parent will show the upgrade modal
       return;
     }
 
-    // OPTIMISTIC UPDATE - Remove card immediately (like Tinder - instant!)
-    if (onLike) {
-      onLike(userId);
-    }
-
-    // Record profile view in background
-    recordProfileView(userId).catch((error) => {
-      console.error('❌ Error recording profile view:', error);
-    });
-
-    // Check for match in background (don't block UI)
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user && userId) {
-        checkForMatch(session.user.id, userId).then((matchResult: any) => {
-          if (matchResult.data) {
-            // console.log('🎉 MATCH FOUND!');
-            setShowMatchPopup(true);
+    // Fallback: If no parent callback, handle like directly
+    try {
+      const likeResult = await likeUser(userId);
+      
+      // If there's an error, DO NOT remove the card
+      if (likeResult.error) {
+        if (likeResult.error.message === 'DAILY_LIKE_LIMIT_REACHED') {
+          // Parent component will handle the limit modal
+          // DO NOT remove card - keep it visible
+          return;
+        }
+        if (likeResult.error.message === 'MATCH_LIMIT_REACHED') {
+          // Parent component will show blocking modal
+          // DO NOT remove card - keep it visible
+          return;
+        }
+        console.error('❌ Error liking user:', likeResult.error);
+        // DO NOT remove card on any error
+        return;
+      }
+      
+      // ONLY remove card if like was successful (no error)
+      if (likeResult.data && !likeResult.error) {
+        // Check for match in background
+        supabase.auth.getSession().then(({ data: { session } }) => {
+          if (session?.user && userId) {
+            checkForMatch(session.user.id, userId).then((matchResult: any) => {
+              if (matchResult.data) {
+                setShowMatchPopup(true);
+              }
+            }).catch((err: any) => {
+              console.error('❌ Error checking match:', err);
+            });
           }
-        }).catch((err: any) => {
-          console.error('❌ Error checking match:', err);
         });
       }
-    });
+    } catch (error) {
+      console.error('❌ Error in handleLike:', error);
+      // DO NOT remove card on exception
+    }
     
-    setIsProcessing(false);
+    // Record profile view in background (non-blocking)
+    recordProfileView(userId).catch((err) => {
+      console.error('❌ Error recording profile view:', err);
+    });
   };
 
   const handlePass = async () => {
