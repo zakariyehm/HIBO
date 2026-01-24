@@ -1,7 +1,8 @@
 import { Colors } from '@/constants/theme';
 import { decryptMessage, deriveMatchKey } from '@/lib/encryption';
-import { getMessages, getUserProfile, markMessagesAsRead, sendMessage, supabase } from '@/lib/supabase';
+import { getMessages, getTypingIndicator, getUserProfile, markMessagesAsRead, sendMessage, setTypingIndicator, supabase } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
+import { Image as ExpoImage } from 'expo-image';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
 import {
@@ -24,7 +25,10 @@ interface Message {
   sender_id: string;
   receiver_id: string;
   content: string;
+  message_type?: 'text' | 'gif' | 'sticker';
+  media_url?: string | null;
   read: boolean;
+  delivered?: boolean;
   created_at: string;
   pending?: boolean; // For messages being sent
 }
@@ -45,6 +49,10 @@ export default function ChatScreen() {
   const scrollViewRef = useRef<ScrollView>(null);
   const inputRef = useRef<TextInput>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [isTyping, setIsTyping] = useState(false);
+  const [partnerTyping, setPartnerTyping] = useState(false);
+  const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const typingCheckIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     if (matchId && userId) {
@@ -72,7 +80,7 @@ export default function ChatScreen() {
     // console.log('🔔 Setting up real-time subscription for match:', matchId);
 
     // Subscribe to new messages for this match
-    const channel = supabase
+    const messagesChannel = supabase
       .channel(`messages:${matchId}`)
       .on(
         'postgres_changes',
@@ -93,13 +101,19 @@ export default function ChatScreen() {
             .maybeSingle();
 
           if (match) {
-            // Decrypt the new message
+            // Decrypt the new message (only for text messages)
             const encryptionKey = deriveMatchKey(matchId, match.user1_id, match.user2_id);
-            const decryptedContent = decryptMessage(payload.new.content, encryptionKey);
+            const messageType = (payload.new as any).message_type || 'text';
+            const decryptedContent = messageType === 'text'
+              ? decryptMessage(payload.new.content, encryptionKey)
+              : payload.new.content; // GIFs/stickers are URLs
             
             const newMessage: Message = {
               ...payload.new,
               content: decryptedContent,
+              message_type: messageType,
+              media_url: (payload.new as any).media_url || null,
+              delivered: (payload.new as any).delivered || false,
             } as Message;
 
             // Add new message to list (avoid duplicates)
@@ -121,12 +135,53 @@ export default function ChatScreen() {
         // console.log('📡 Subscription status:', status);
       });
 
-    // Cleanup subscription on unmount
+    // Subscribe to typing indicators
+    const typingChannel = supabase
+      .channel(`typing:${matchId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'typing_indicators',
+          filter: `match_id=eq.${matchId}`,
+        },
+        async (payload) => {
+          // Only show typing if it's from the partner, not current user
+          if (payload.new.user_id !== currentUserId) {
+            setPartnerTyping(payload.new.is_typing);
+            // Auto-hide typing after 3 seconds
+            if (payload.new.is_typing) {
+              setTimeout(() => {
+                setPartnerTyping(false);
+              }, 3000);
+            }
+          }
+        }
+      )
+      .subscribe();
+
+    // Check typing indicator periodically
+    typingCheckIntervalRef.current = setInterval(async () => {
+      if (matchId && userId) {
+        const { data } = await getTypingIndicator(matchId, userId);
+        setPartnerTyping(data?.is_typing || false);
+      }
+    }, 1000);
+
+    // Cleanup subscriptions on unmount
     return () => {
       // console.log('🔕 Unsubscribing from real-time updates');
-      supabase.removeChannel(channel);
+      supabase.removeChannel(messagesChannel);
+      supabase.removeChannel(typingChannel);
+      if (typingCheckIntervalRef.current) {
+        clearInterval(typingCheckIntervalRef.current);
+      }
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
     };
-  }, [matchId, currentUserId]);
+  }, [matchId, currentUserId, userId]);
 
   // Refresh messages silently when screen comes into focus (like WhatsApp/Telegram)
   useFocusEffect(
@@ -236,12 +291,19 @@ export default function ChatScreen() {
     }
   };
 
-  const handleSendMessage = async () => {
-    if (!messageText.trim() || !matchId || !userId || sending) return;
+  const handleSendMessage = async (gifUrl?: string) => {
+    const content = gifUrl || messageText.trim();
+    if (!content || !matchId || !userId || sending) return;
 
-    const trimmedMessage = messageText.trim();
+    const messageType = gifUrl ? 'gif' : 'text';
     setMessageText('');
     setSending(true);
+    setIsTyping(false);
+    
+    // Stop typing indicator
+    if (matchId) {
+      await setTypingIndicator(matchId, false);
+    }
 
     // Create pending message with clock icon (optimistic update)
     const pendingMessageId = `pending-${Date.now()}`;
@@ -249,8 +311,11 @@ export default function ChatScreen() {
       id: pendingMessageId,
       sender_id: currentUserId || '',
       receiver_id: userId,
-      content: trimmedMessage,
+      content: content,
+      message_type: messageType,
+      media_url: gifUrl || null,
       read: false,
+      delivered: false,
       created_at: new Date().toISOString(),
       pending: true,
     };
@@ -259,13 +324,15 @@ export default function ChatScreen() {
     setMessages((prev) => [...prev, pendingMessage]);
 
     try {
-      const { data, error } = await sendMessage(userId, matchId, trimmedMessage);
+      const { data, error } = await sendMessage(userId, matchId, content, messageType, gifUrl);
 
       if (error) {
         console.error('❌ Error sending message:', error);
         // Remove pending message on error
         setMessages((prev) => prev.filter((msg) => msg.id !== pendingMessageId));
-        setMessageText(trimmedMessage); // Restore message on error
+        if (!gifUrl) {
+          setMessageText(content); // Restore message on error
+        }
         setSending(false);
         return;
       }
@@ -286,8 +353,41 @@ export default function ChatScreen() {
       console.error('❌ Exception in handleSendMessage:', error);
       // Remove pending message on error
       setMessages((prev) => prev.filter((msg) => msg.id !== pendingMessageId));
-      setMessageText(trimmedMessage);
+      if (!gifUrl) {
+        setMessageText(content);
+      }
       setSending(false);
+    }
+  };
+
+  // Handle typing detection
+  const handleTextChange = (text: string) => {
+    setMessageText(text);
+    
+    // Set typing indicator
+    if (matchId && text.trim().length > 0 && !isTyping) {
+      setIsTyping(true);
+      setTypingIndicator(matchId, true);
+    }
+
+    // Clear existing timeout
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+
+    // Stop typing after 2 seconds of inactivity
+    typingTimeoutRef.current = setTimeout(async () => {
+      setIsTyping(false);
+      if (matchId) {
+        await setTypingIndicator(matchId, false);
+      }
+    }, 2000);
+
+    // Scroll to bottom when typing
+    if (messages.length > 0) {
+      setTimeout(() => {
+        scrollViewRef.current?.scrollToEnd({ animated: true });
+      }, 50);
     }
   };
 
@@ -358,86 +458,119 @@ export default function ChatScreen() {
             >
               {messages.map((message) => {
                 const isSent = message.sender_id === currentUserId;
+                const messageType = message.message_type || 'text';
+                const isGif = messageType === 'gif' || messageType === 'sticker';
+                const mediaUrl = message.media_url || (isGif ? message.content : null);
+                
                 return (
                   <View
                     key={message.id}
                     style={[styles.messageWrapper, isSent ? styles.messageSent : styles.messageReceived]}
                   >
-                    <View style={[styles.messageBubble, isSent ? styles.messageBubbleSent : styles.messageBubbleReceived]}>
-                      <View style={styles.messageContentRow}>
-                        <Text style={[styles.messageText, isSent ? styles.messageTextSent : styles.messageTextReceived]}>
-                          {message.content}
-                        </Text>
-                        <View style={styles.messageFooterRow}>
-                          <Text style={[styles.messageTime, isSent ? styles.messageTimeSent : styles.messageTimeReceived]}>
-                            {formatTime(message.created_at)}
-                          </Text>
-                          {isSent && (
-                            <View style={styles.readReceipt}>
-                              {message.pending ? (
-                                // Show clock icon for pending messages (like WhatsApp)
-                                <Ionicons 
-                                  name="time-outline" 
-                                  size={14} 
-                                  color="rgba(255, 255, 255, 0.7)" 
-                                />
-                              ) : message.read ? (
-                                // Show double checkmark for read messages
-                                <>
-                                  <Ionicons 
-                                    name="checkmark-done" 
-                                    size={14} 
-                                    color="#4FC3F7" 
-                                  />
-                                  <Ionicons 
-                                    name="checkmark-done" 
-                                    size={14} 
-                                    color="#4FC3F7" 
-                                    style={{ marginLeft: -4 }}
-                                  />
-                                </>
-                              ) : (
-                                // Show single checkmark for sent but not read
-                                <Ionicons 
-                                  name="checkmark" 
-                                  size={14} 
-                                  color="rgba(255, 255, 255, 0.7)" 
-                                />
-                              )}
-                            </View>
-                          )}
+                    <View style={[styles.messageBubble, isSent ? styles.messageBubbleSent : styles.messageBubbleReceived, isGif && styles.messageBubbleGif]}>
+                      {isGif && mediaUrl ? (
+                        <View style={styles.gifContainer}>
+                          <ExpoImage
+                            source={{ uri: mediaUrl }}
+                            style={styles.gifImage}
+                            contentFit="cover"
+                          />
+                          <View style={styles.messageFooterOverlay}>
+                            <Text style={[styles.messageTime, styles.messageTimeOverlay]}>
+                              {formatTime(message.created_at)}
+                            </Text>
+                            {isSent && (
+                              <View style={styles.readReceipt}>
+                                {message.pending ? (
+                                  <Ionicons name="time-outline" size={12} color="rgba(255, 255, 255, 0.9)" />
+                                ) : message.read ? (
+                                  <Ionicons name="checkmark-done" size={14} color="#4FC3F7" />
+                                ) : message.delivered ? (
+                                  <Ionicons name="checkmark-done" size={14} color="rgba(255, 255, 255, 0.9)" />
+                                ) : (
+                                  <Ionicons name="checkmark" size={12} color="rgba(255, 255, 255, 0.7)" />
+                                )}
+                              </View>
+                            )}
+                          </View>
                         </View>
-                      </View>
+                      ) : (
+                        <View style={styles.messageContentRow}>
+                          <Text style={[styles.messageText, isSent ? styles.messageTextSent : styles.messageTextReceived]}>
+                            {message.content}
+                          </Text>
+                          <View style={styles.messageFooterRow}>
+                            <Text style={[styles.messageTime, isSent ? styles.messageTimeSent : styles.messageTimeReceived]}>
+                              {formatTime(message.created_at)}
+                            </Text>
+                            {isSent && (
+                              <View style={styles.readReceipt}>
+                                {message.pending ? (
+                                  <Ionicons name="time-outline" size={14} color="rgba(255, 255, 255, 0.7)" />
+                                ) : message.read ? (
+                                  <Ionicons name="checkmark-done" size={14} color="#4FC3F7" />
+                                ) : message.delivered ? (
+                                  <Ionicons name="checkmark-done" size={14} color="rgba(255, 255, 255, 0.9)" />
+                                ) : (
+                                  <Ionicons name="checkmark" size={14} color="rgba(255, 255, 255, 0.7)" />
+                                )}
+                              </View>
+                            )}
+                          </View>
+                        </View>
+                      )}
                     </View>
                   </View>
                 );
               })}
+              {/* Typing Indicator */}
+              {partnerTyping && (
+                <View style={[styles.messageWrapper, styles.messageReceived]}>
+                  <View style={[styles.messageBubble, styles.messageBubbleReceived, styles.typingBubble]}>
+                    <View style={styles.typingIndicator}>
+                      <View style={[styles.typingDot, { animationDelay: '0ms' }]} />
+                      <View style={[styles.typingDot, { animationDelay: '150ms' }]} />
+                      <View style={[styles.typingDot, { animationDelay: '300ms' }]} />
+                    </View>
+                  </View>
+                </View>
+              )}
             </ScrollView>
           )}
 
         {/* Input Area - Always visible */}
         <View style={styles.inputContainer}>
+          <TouchableOpacity
+            style={styles.gifButton}
+            onPress={() => {
+              // Open GIF picker (using Giphy API or similar)
+              // For now, using a simple demo GIF
+              const demoGifs = [
+                'https://media.giphy.com/media/3o7aCTPPm4OHfRLSH6/giphy.gif',
+                'https://media.giphy.com/media/l0MYC0LajboP0Zb7G/giphy.gif',
+                'https://media.giphy.com/media/3o7abKhOpu0NwenH3O/giphy.gif',
+                'https://media.giphy.com/media/l0HlBO7eyXzSZkJri/giphy.gif',
+              ];
+              const randomGif = demoGifs[Math.floor(Math.random() * demoGifs.length)];
+              handleSendMessage(randomGif);
+            }}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="images-outline" size={24} color={Colors.primary} />
+          </TouchableOpacity>
           <TextInput
             ref={inputRef}
             style={styles.input}
             placeholder="Type a message..."
             placeholderTextColor={Colors.textLight}
             value={messageText}
-            onChangeText={(text) => {
-              setMessageText(text);
-              // Scroll to bottom when typing to show last message
-              if (messages.length > 0) {
-                setTimeout(() => {
-                  scrollViewRef.current?.scrollToEnd({ animated: true });
-                }, 50);
-              }
-            }}
+            onChangeText={handleTextChange}
             multiline
             maxLength={1000}
             editable={!sending && !(loading && isInitialLoad)}
             returnKeyType="send"
             blurOnSubmit={false}
-            onSubmitEditing={handleSendMessage}
+            onSubmitEditing={() => handleSendMessage()}
             onFocus={() => {
               // Scroll to bottom when input is focused (keyboard opens)
               setTimeout(() => {
@@ -447,7 +580,7 @@ export default function ChatScreen() {
           />
           <TouchableOpacity
             style={[styles.sendButton, (!messageText.trim() || sending) && styles.sendButtonDisabled]}
-            onPress={handleSendMessage}
+            onPress={() => handleSendMessage()}
             disabled={!messageText.trim() || sending}
             activeOpacity={0.7}
           >
@@ -642,6 +775,64 @@ const styles = StyleSheet.create({
   },
   sendButtonDisabled: {
     opacity: 0.5,
+  },
+  gifButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: Colors.background,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  // GIF/Sticker styles
+  messageBubbleGif: {
+    padding: 0,
+    overflow: 'hidden',
+    borderRadius: 16,
+  },
+  gifContainer: {
+    width: 250,
+    height: 200,
+    position: 'relative',
+  },
+  gifImage: {
+    width: '100%',
+    height: '100%',
+  },
+  messageFooterOverlay: {
+    position: 'absolute',
+    bottom: 8,
+    right: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 12,
+    gap: 4,
+  },
+  messageTimeOverlay: {
+    color: '#FFFFFF',
+    fontSize: 11,
+  },
+  // Typing indicator styles
+  typingBubble: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  typingIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  typingDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: Colors.textLight,
+    opacity: 0.6,
   },
 });
 

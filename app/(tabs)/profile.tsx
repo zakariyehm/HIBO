@@ -5,7 +5,7 @@
 
 import { Toast } from '@/components/Toast';
 import { Colors } from '@/constants/theme';
-import { createPost, deletePost, getUserPosts, getUserProfile, Post, signOut, supabase, uploadPhotos } from '@/lib/supabase';
+import { createPost, createPrompt, deletePost, deletePrompt, getUserPosts, getUserProfile, getUserPrompts, Post, Prompt, PROMPT_QUESTIONS, signOut, supabase, updatePrompt, uploadPhotos } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
@@ -99,6 +99,11 @@ export default function ProfileScreen() {
   const [newPostImage, setNewPostImage] = useState<string | null>(null);
   const [newPostDescription, setNewPostDescription] = useState('');
   const [posting, setPosting] = useState(false);
+  const [prompts, setPrompts] = useState<Prompt[]>([]);
+  const [editingPrompt, setEditingPrompt] = useState<Prompt | null>(null);
+  const [newPromptQuestion, setNewPromptQuestion] = useState('');
+  const [newPromptAnswer, setNewPromptAnswer] = useState('');
+  const [showPromptModal, setShowPromptModal] = useState(false);
 
   // Show toast notification
   const showToast = (message: string, type: 'info' | 'error' | 'success' = 'info') => {
@@ -688,6 +693,12 @@ export default function ProfileScreen() {
           const { data: postsData } = await getUserPosts(userId);
           if (postsData) {
             setPosts(postsData);
+          }
+
+          // Fetch prompts
+          const { data: promptsData } = await getUserPrompts(userId);
+          if (promptsData) {
+            setPrompts(promptsData);
           }
         } else {
           // console.log('⚠️  No profile data found for this user');
@@ -1356,11 +1367,86 @@ export default function ProfileScreen() {
           </View>
         )}
 
+        {/* Prompts Section - Hinge Style */}
+        <View style={styles.promptsSection}>
+          {/* Title Card with Purple Header */}
+          <View style={styles.promptsTitleCard}>
+            <View style={styles.promptsTitleHeader}>
+              <Text style={styles.promptsTitleText}>PROMPTS</Text>
+              {activeTab === 'edit' && (
+                <TouchableOpacity
+                  style={styles.addButtonInHeader}
+                  onPress={() => {
+                    setEditingPrompt(null);
+                    setNewPromptQuestion('');
+                    setNewPromptAnswer('');
+                    setShowPromptModal(true);
+                  }}
+                >
+                  <Ionicons name="add" size={20} color={theme.black} />
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+          
+          {activeTab === 'edit' ? (
+            <View style={styles.promptsList}>
+              {prompts.map((prompt, index) => (
+                <View key={prompt.id} style={styles.promptItem}>
+                  <View style={styles.promptContent}>
+                    <Text style={styles.promptQuestion}>{prompt.question}</Text>
+                    <Text style={styles.promptAnswer}>{prompt.answer}</Text>
+                  </View>
+                  <View style={styles.promptActions}>
+                    <TouchableOpacity
+                      style={styles.promptEditButton}
+                      onPress={() => {
+                        setEditingPrompt(prompt);
+                        setNewPromptQuestion(prompt.question);
+                        setNewPromptAnswer(prompt.answer);
+                        setShowPromptModal(true);
+                      }}
+                    >
+                      <Ionicons name="pencil" size={16} color={Colors.primary} />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.promptDeleteButton}
+                      onPress={async () => {
+                        const { error } = await deletePrompt(prompt.id);
+                        if (error) {
+                          showToast('Failed to delete prompt', 'error');
+                        } else {
+                          setPrompts(prompts.filter(p => p.id !== prompt.id));
+                          showToast('Prompt deleted', 'success');
+                        }
+                      }}
+                    >
+                      <Ionicons name="trash" size={16} color={Colors.red} />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ))}
+              {prompts.length === 0 && (
+                <Text style={styles.emptyText}>No prompts yet. Add one to stand out!</Text>
+              )}
+            </View>
+          ) : (
+            <View style={styles.promptsList}>
+              {prompts.map((prompt, index) => (
+                <View key={prompt.id} style={styles.promptCard}>
+                  <Text style={styles.promptQuestion}>{prompt.question}</Text>
+                  <Text style={styles.promptAnswer}>{prompt.answer}</Text>
+                </View>
+              ))}
+              {prompts.length === 0 && (
+                <Text style={styles.emptyText}>No prompts added yet</Text>
+              )}
+            </View>
+          )}
+        </View>
+
         {/* Posts Section */}
         <View style={styles.postsSection}>
-          <View style={styles.postsHeader}>
-            <Text style={styles.postsTitle}>Posts</Text>
-          </View>
 
           {/* Inline Add Post Input - Like Screenshot */}
           <View style={styles.inlinePostInputContainer}>
@@ -1480,6 +1566,122 @@ export default function ProfileScreen() {
 
       </ScrollView>
 
+      {/* Prompt Modal */}
+      {showPromptModal && (
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>
+                {editingPrompt ? 'Edit Prompt' : 'Add Prompt'}
+              </Text>
+              <TouchableOpacity
+                onPress={() => {
+                  setShowPromptModal(false);
+                  setEditingPrompt(null);
+                  setNewPromptQuestion('');
+                  setNewPromptAnswer('');
+                }}
+              >
+                <Ionicons name="close" size={24} color={Colors.textDark} />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.modalBody}>
+              <Text style={styles.modalLabel}>Question</Text>
+              <ScrollView style={styles.questionPicker}>
+                {PROMPT_QUESTIONS.map((question, index) => (
+                  <TouchableOpacity
+                    key={index}
+                    style={[
+                      styles.questionOption,
+                      newPromptQuestion === question && styles.questionOptionSelected,
+                    ]}
+                    onPress={() => setNewPromptQuestion(question)}
+                  >
+                    <Text
+                      style={[
+                        styles.questionOptionText,
+                        newPromptQuestion === question && styles.questionOptionTextSelected,
+                      ]}
+                    >
+                      {question}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+
+              <Text style={styles.modalLabel}>Your Answer</Text>
+              <TextInput
+                style={styles.modalTextInput}
+                value={newPromptAnswer}
+                onChangeText={setNewPromptAnswer}
+                placeholder="Type your answer..."
+                placeholderTextColor={Colors.textLight}
+                multiline
+                numberOfLines={3}
+                textAlignVertical="top"
+              />
+
+              <TouchableOpacity
+                style={[
+                  styles.modalSaveButton,
+                  (!newPromptQuestion || !newPromptAnswer.trim()) && styles.modalSaveButtonDisabled,
+                ]}
+                onPress={async () => {
+                  if (!newPromptQuestion || !newPromptAnswer.trim()) return;
+
+                  if (editingPrompt) {
+                    // Update existing prompt
+                    const { error } = await updatePrompt(
+                      editingPrompt.id,
+                      newPromptQuestion,
+                      newPromptAnswer.trim()
+                    );
+                    if (error) {
+                      showToast('Failed to update prompt', 'error');
+                    } else {
+                      setPrompts(
+                        prompts.map(p =>
+                          p.id === editingPrompt.id
+                            ? { ...p, question: newPromptQuestion, answer: newPromptAnswer.trim() }
+                            : p
+                        )
+                      );
+                      showToast('Prompt updated', 'success');
+                      setShowPromptModal(false);
+                      setEditingPrompt(null);
+                      setNewPromptQuestion('');
+                      setNewPromptAnswer('');
+                    }
+                  } else {
+                    // Create new prompt
+                    const orderIndex = prompts.length;
+                    const { data, error } = await createPrompt(
+                      newPromptQuestion,
+                      newPromptAnswer.trim(),
+                      orderIndex
+                    );
+                    if (error) {
+                      showToast('Failed to create prompt', 'error');
+                    } else if (data) {
+                      setPrompts([...prompts, data]);
+                      showToast('Prompt added', 'success');
+                      setShowPromptModal(false);
+                      setNewPromptQuestion('');
+                      setNewPromptAnswer('');
+                    }
+                  }
+                }}
+                disabled={!newPromptQuestion || !newPromptAnswer.trim()}
+              >
+                <Text style={styles.modalSaveButtonText}>
+                  {editingPrompt ? 'Update' : 'Add'} Prompt
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      )}
 
       {/* Toast Notification */}
       <Toast
@@ -1918,20 +2120,37 @@ const styles = StyleSheet.create({
   saveSpinner: {
     marginRight: 4,
   },
-  postsSection: {
+  promptsSection: {
     marginHorizontal: 20,
     marginBottom: 16,
   },
-  postsHeader: {
+  promptsTitleCard: {
+    backgroundColor: theme.secondary,
+    borderWidth: 1,
+    borderColor: theme.black,
+    marginBottom: 12,
+  },
+  promptsTitleHeader: {
+    backgroundColor: '#D5AFFD',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
   },
-  postsTitle: {
-    fontSize: 18,
-    fontWeight: '600',
+  promptsTitleText: {
+    fontSize: 16,
+    fontWeight: '700',
     color: theme.black,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  addButtonInHeader: {
+    padding: 4,
+  },
+  postsSection: {
+    marginHorizontal: 20,
+    marginBottom: 16,
   },
   addPostButton: {
     flexDirection: 'row',
@@ -2235,6 +2454,135 @@ const styles = StyleSheet.create({
   },
   createPostButtonText: {
     color: theme.white,
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  // Prompts styles
+  promptsList: {
+    gap: 12,
+  },
+  promptItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    padding: 12,
+    backgroundColor: Colors.cardBackground,
+    borderRadius: 0,
+    borderWidth: 1,
+    borderColor: Colors.borderLight,
+    marginBottom: 8,
+  },
+  promptContent: {
+    flex: 1,
+  },
+  promptQuestion: {
+    fontSize: 14,
+    color: theme.gray,
+    fontWeight: '400',
+    marginBottom: 12,
+  },
+  promptAnswer: {
+    fontSize: 24,
+    color: theme.black,
+    fontWeight: '700',
+    lineHeight: 32,
+    letterSpacing: -0.5,
+  },
+  promptCard: {
+    padding: 16,
+    backgroundColor: theme.secondary,
+    borderRadius: 0,
+    marginBottom: 12,
+  },
+  promptActions: {
+    flexDirection: 'row',
+    gap: 8,
+    marginLeft: 12,
+  },
+  promptEditButton: {
+    padding: 8,
+  },
+  promptDeleteButton: {
+    padding: 8,
+  },
+  addButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 0,
+    borderWidth: 1,
+    borderColor: Colors.primary,
+  },
+  addButtonText: {
+    fontSize: 14,
+    color: Colors.primary,
+    fontWeight: '600',
+  },
+  emptyText: {
+    fontSize: 14,
+    color: Colors.textLight,
+    textAlign: 'center',
+    padding: 20,
+  },
+  // Modal styles for prompts
+  modalBody: {
+    gap: 16,
+  },
+  modalLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: Colors.textDark,
+    marginBottom: 8,
+  },
+  questionPicker: {
+    maxHeight: 200,
+    borderWidth: 1,
+    borderColor: Colors.borderLight,
+    borderRadius: 0,
+    marginBottom: 16,
+  },
+  questionOption: {
+    padding: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.borderLight,
+  },
+  questionOptionSelected: {
+    backgroundColor: Colors.primary + '20',
+  },
+  questionOptionText: {
+    fontSize: 14,
+    color: Colors.textDark,
+  },
+  questionOptionTextSelected: {
+    fontWeight: '600',
+    color: Colors.primary,
+  },
+  modalTextInput: {
+    fontSize: 16,
+    color: Colors.textDark,
+    borderWidth: 1,
+    borderColor: Colors.borderLight,
+    borderRadius: 0,
+    padding: 12,
+    minHeight: 80,
+    textAlignVertical: 'top',
+  },
+  modalSaveButton: {
+    backgroundColor: Colors.primary,
+    paddingVertical: 14,
+    borderRadius: 0,
+    borderWidth: 1,
+    borderColor: Colors.textDark,
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  modalSaveButtonDisabled: {
+    opacity: 0.5,
+  },
+  modalSaveButtonText: {
+    color: Colors.cardBackground,
     fontSize: 16,
     fontWeight: '600',
   },

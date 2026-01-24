@@ -85,6 +85,10 @@ export interface UserProfile {
   nationality_id_back?: string;
   national_id_number?: string;
   bio: string;
+  bio_title?: string;
+  is_premium?: boolean;
+  premium_expires_at?: string;
+  last_active?: string;
   created_at?: string;
   updated_at?: string;
 }
@@ -302,7 +306,7 @@ export const getAllUserProfiles = async (excludeUserId?: string) => {
     
     let query = supabase
       .from('profiles')
-      .select('id, first_name, last_name, location, bio, bio_title, photos, nationality, gender, interested_in, created_at, last_active')
+      .select('id, first_name, last_name, location, bio, bio_title, photos, nationality, gender, interested_in, age, height, education_level, interests, personality, created_at, last_active')
       .order('last_active', { ascending: false, nullsLast: true })
       .order('created_at', { ascending: false });
     
@@ -429,11 +433,63 @@ export const uploadDocument = async (userId: string, documentUri: string, docume
 };
 
 // Likes and Matches functions - OPTIMIZED FOR SPEED (Tinder-like)
+// Check if user has reached match limit (Tinder/Hinge style)
+export const checkMatchLimit = async (): Promise<{ reached: boolean; waitingCount: number; limit: number }> => {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) {
+      return { reached: false, waitingCount: 0, limit: 0 };
+    }
+
+    const userId = session.user.id;
+    
+    // Check premium status
+    const premium = await isPremiumUser();
+    const LIMIT = premium ? 15 : 7;
+
+    // Get active matches waiting for reply (no messages sent)
+    const { data: matches } = await supabase
+      .from('matches')
+      .select('id, has_messaged, is_expired')
+      .or(`user1_id.eq.${userId},user2_id.eq.${userId}`);
+
+    if (!matches) {
+      return { reached: false, waitingCount: 0, limit: LIMIT };
+    }
+
+    const activeMatches = matches.filter(m => !m.is_expired);
+    const waitingForReply = activeMatches.filter(m => !m.has_messaged);
+    const waitingCount = waitingForReply.length;
+
+    return {
+      reached: waitingCount >= LIMIT,
+      waitingCount,
+      limit: LIMIT,
+    };
+  } catch (error) {
+    console.error('❌ Error checking match limit:', error);
+    return { reached: false, waitingCount: 0, limit: 0 };
+  }
+};
+
 export const likeUser = async (likedUserId: string) => {
   try {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session?.user) {
       return { data: null, error: { message: 'Not authenticated' } };
+    }
+
+    // Check match limit before allowing like (Tinder/Hinge style)
+    const limitCheck = await checkMatchLimit();
+    if (limitCheck.reached) {
+      return { 
+        data: null, 
+        error: { 
+          message: 'MATCH_LIMIT_REACHED',
+          waitingCount: limitCheck.waitingCount,
+          limit: limitCheck.limit,
+        } 
+      };
     }
 
     const likerId = session.user.id;
@@ -596,15 +652,39 @@ export const getUserMatches = async () => {
           return null;
         }
         
+        // Check if match has messages
+        const { count: messageCount } = await supabase
+          .from('messages')
+          .select('*', { count: 'exact', head: true })
+          .eq('match_id', match.id);
+        
+        const hasMessages = (messageCount || 0) > 0;
+        
+        // Check if match is expired (7 days without messages)
+        const matchDate = new Date(match.created_at);
+        const now = new Date();
+        const daysSinceMatch = Math.floor((now.getTime() - matchDate.getTime()) / (1000 * 60 * 60 * 24));
+        const isExpired = !hasMessages && daysSinceMatch >= 7;
+        
+        // Get expiration date (7 days from creation if no messages)
+        const expirationDate = hasMessages 
+          ? null 
+          : new Date(matchDate.getTime() + 7 * 24 * 60 * 60 * 1000);
+        
         const { data: profile } = await getUserProfile(partnerId);
         return {
-          match,
+          match: {
+            ...match,
+            has_messaged: hasMessages,
+            expiration_date: expirationDate?.toISOString() || null,
+            is_expired: isExpired,
+          },
           profile,
         };
       })
     );
 
-    // Filter out null entries (blocked users)
+    // Filter out null entries (blocked users) and expired matches
     const filteredMatches = matchProfiles.filter(m => m !== null);
 
     return { data: filteredMatches, error: null };
@@ -626,9 +706,10 @@ export const getUserLikes = async () => {
     // Get all users this user has liked
     const { data: likes, error } = await supabase
       .from('likes')
-      .select('liked_id')
+      .select('liked_id, created_at')
       .eq('liker_id', userId)
-      .eq('action', 'like');
+      .eq('action', 'like')
+      .order('created_at', { ascending: false });
 
     if (error) {
       console.error('❌ Error fetching likes:', error);
@@ -639,13 +720,133 @@ export const getUserLikes = async () => {
     const likedProfiles = await Promise.all(
       (likes || []).map(async (like) => {
         const { data: profile } = await getUserProfile(like.liked_id);
-        return profile;
+        return profile ? { ...profile, liked_at: like.created_at } : null;
       })
     );
 
     return { data: likedProfiles.filter(Boolean), error: null };
   } catch (error: any) {
     console.error('❌ Exception in getUserLikes:', error);
+    return { data: null, error };
+  }
+};
+
+// Get users who liked you (received likes)
+export const getReceivedLikes = async () => {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) {
+      return { data: null, error: { message: 'Not authenticated' } };
+    }
+
+    const userId = session.user.id;
+
+    // Get blocked users list
+    const { data: blockedUsers } = await getBlockedUsers();
+    const blockedIds = blockedUsers || [];
+
+    // Get all users who liked this user
+    const { data: likes, error } = await supabase
+      .from('likes')
+      .select('liker_id, created_at')
+      .eq('liked_id', userId)
+      .eq('action', 'like')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('❌ Error fetching received likes:', error);
+      return { data: null, error };
+    }
+
+    // Filter out blocked users and get profiles
+    const receivedLikes = await Promise.all(
+      (likes || [])
+        .filter(like => !blockedIds.includes(like.liker_id))
+        .map(async (like) => {
+          const { data: profile } = await getUserProfile(like.liker_id);
+          // Check if already matched (don't show in likes if matched)
+          const { data: match } = await supabase
+            .from('matches')
+            .select('id')
+            .or(`and(user1_id.eq.${userId},user2_id.eq.${like.liker_id}),and(user1_id.eq.${like.liker_id},user2_id.eq.${userId})`)
+            .maybeSingle();
+          
+          if (match) {
+            return null; // Already matched, don't show
+          }
+          
+          return profile ? { ...profile, liked_at: like.created_at } : null;
+        })
+    );
+
+    return { data: receivedLikes.filter(Boolean), error: null };
+  } catch (error: any) {
+    console.error('❌ Exception in getReceivedLikes:', error);
+    return { data: null, error };
+  }
+};
+
+// Premium feature functions
+export const isPremiumUser = async (): Promise<boolean> => {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) {
+      return false;
+    }
+
+    const { data: profile } = await getUserProfile(session.user.id);
+    if (!profile) {
+      return false;
+    }
+
+    const isPremium = (profile as any).is_premium || false;
+    const expiresAt = (profile as any).premium_expires_at;
+
+    // Check if premium has expired
+    if (expiresAt) {
+      const expirationDate = new Date(expiresAt);
+      const now = new Date();
+      if (now > expirationDate) {
+        return false; // Premium expired
+      }
+    }
+
+    return isPremium;
+  } catch (error) {
+    console.error('❌ Error checking premium status:', error);
+    return false;
+  }
+};
+
+export const upgradeToPremium = async () => {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) {
+      return { data: null, error: { message: 'Not authenticated' } };
+    }
+
+    // Set premium to true and expiration to 1 year from now
+    const expiresAt = new Date();
+    expiresAt.setFullYear(expiresAt.getFullYear() + 1);
+
+    const { data, error } = await supabase
+      .from('profiles')
+      .update({
+        is_premium: true,
+        premium_expires_at: expiresAt.toISOString(),
+      })
+      .eq('id', session.user.id)
+      .select()
+      .single();
+
+    if (error) {
+      console.error('❌ Error upgrading to premium:', error);
+      return { data: null, error };
+    }
+
+    return { data, error: null };
+  } catch (error: any) {
+    console.error('❌ Exception in upgradeToPremium:', error);
     return { data: null, error };
   }
 };
@@ -858,7 +1059,13 @@ export const getViewedProfiles = async () => {
 };
 
 // Messaging functions with End-to-End Encryption
-export const sendMessage = async (receiverId: string, matchId: string, content: string) => {
+export const sendMessage = async (
+  receiverId: string, 
+  matchId: string, 
+  content: string,
+  messageType: 'text' | 'gif' | 'sticker' = 'text',
+  mediaUrl?: string
+) => {
   try {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session?.user) {
@@ -890,9 +1097,11 @@ export const sendMessage = async (receiverId: string, matchId: string, content: 
       return { data: null, error: { message: 'Receiver is not part of this match' } };
     }
 
-    // Encrypt message content (End-to-End Encryption)
+    // Encrypt message content (End-to-End Encryption) - only for text messages
     const encryptionKey = deriveMatchKey(matchId, match.user1_id, match.user2_id);
-    const encryptedContent = encryptMessage(content.trim(), encryptionKey);
+    const encryptedContent = messageType === 'text' 
+      ? encryptMessage(content.trim(), encryptionKey)
+      : content; // GIFs/stickers don't need encryption (they're URLs)
 
     const { data, error } = await supabase
       .from('messages')
@@ -901,7 +1110,10 @@ export const sendMessage = async (receiverId: string, matchId: string, content: 
         receiver_id: receiverId,
         match_id: matchId,
         content: encryptedContent, // Store encrypted content
+        message_type: messageType,
+        media_url: mediaUrl || null,
         read: false,
+        delivered: false, // Will be set to true by trigger
       })
       .select()
       .single();
@@ -914,7 +1126,9 @@ export const sendMessage = async (receiverId: string, matchId: string, content: 
     // Decrypt the message before returning (for immediate display)
     const decryptedData = {
       ...data,
-      content: decryptMessage(data.content, encryptionKey),
+      content: messageType === 'text' 
+        ? decryptMessage(data.content, encryptionKey)
+        : data.content, // GIFs/stickers are already URLs
     };
 
     // console.log('✅ Encrypted message sent successfully');
@@ -961,10 +1175,18 @@ export const getMessages = async (matchId: string) => {
 
     // Decrypt all messages (End-to-End Decryption)
     const encryptionKey = deriveMatchKey(matchId, match.user1_id, match.user2_id);
-    const decryptedMessages = (data || []).map((message) => ({
-      ...message,
-      content: decryptMessage(message.content, encryptionKey),
-    }));
+    const decryptedMessages = (data || []).map((message) => {
+      const messageType = (message as any).message_type || 'text';
+      return {
+        ...message,
+        content: messageType === 'text'
+          ? decryptMessage(message.content, encryptionKey)
+          : message.content, // GIFs/stickers are URLs
+        message_type: messageType,
+        media_url: (message as any).media_url || null,
+        delivered: (message as any).delivered || false,
+      };
+    });
 
     return { data: decryptedMessages, error: null };
   } catch (error: any) {
@@ -1118,6 +1340,76 @@ export const markMessagesAsRead = async (matchId: string) => {
   }
 };
 
+// Typing indicator functions
+export const setTypingIndicator = async (matchId: string, isTyping: boolean) => {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) {
+      return { data: null, error: { message: 'Not authenticated' } };
+    }
+
+    const userId = session.user.id;
+
+    // Upsert typing indicator
+    const { data, error } = await supabase
+      .from('typing_indicators')
+      .upsert({
+        match_id: matchId,
+        user_id: userId,
+        is_typing: isTyping,
+        updated_at: new Date().toISOString(),
+      }, {
+        onConflict: 'match_id,user_id',
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error('❌ Error setting typing indicator:', error);
+      return { data: null, error };
+    }
+
+    return { data, error: null };
+  } catch (error: any) {
+    console.error('❌ Exception in setTypingIndicator:', error);
+    return { data: null, error };
+  }
+};
+
+export const getTypingIndicator = async (matchId: string, partnerId: string) => {
+  try {
+    const { data, error } = await supabase
+      .from('typing_indicators')
+      .select('*')
+      .eq('match_id', matchId)
+      .eq('user_id', partnerId)
+      .eq('is_typing', true)
+      .maybeSingle();
+
+    if (error) {
+      console.error('❌ Error getting typing indicator:', error);
+      return { data: null, error };
+    }
+
+    // Check if typing indicator is recent (within last 3 seconds)
+    if (data && data.updated_at) {
+      const updatedAt = new Date(data.updated_at).getTime();
+      const now = new Date().getTime();
+      const diffInSeconds = (now - updatedAt) / 1000;
+      
+      if (diffInSeconds > 3) {
+        // Typing indicator is stale, return null
+        return { data: null, error: null };
+      }
+    }
+
+    return { data, error: null };
+  } catch (error: any) {
+    console.error('❌ Exception in getTypingIndicator:', error);
+    return { data: null, error };
+  }
+};
+
 // Posts functions
 export interface Post {
   id: string;
@@ -1207,6 +1499,150 @@ export const getUserPosts = async (userId: string) => {
     return { data, error: null };
   } catch (error: any) {
     console.error('❌ Exception in getUserPosts:', error);
+    return { data: null, error };
+  }
+};
+
+// Prompts/Questions functions (Hinge-style)
+export interface Prompt {
+  id: string;
+  user_id: string;
+  question: string;
+  answer: string;
+  order_index: number;
+  created_at: string;
+  updated_at: string;
+}
+
+// Predefined prompt questions (like Hinge)
+export const PROMPT_QUESTIONS = [
+  "Two truths and a lie",
+  "I want someone who",
+  "I'm looking for",
+  "The way to my heart is",
+  "I'll fall for you if",
+  "My simple pleasures",
+  "I'm the type of person who",
+  "The one thing I'd love to know about you is",
+  "My most irrational fear",
+  "I'll know I've found the one when",
+  "My love language is",
+  "The best way to ask me out is by",
+  "I'm weirdly attracted to",
+  "My golden rule",
+  "I'll brag about you to my friends if",
+  "I'm a great +1 because",
+  "I spend way too much time thinking about",
+  "I'm a catch because",
+  "I'm looking for",
+  "We'll get along if",
+];
+
+export const getUserPrompts = async (userId: string) => {
+  try {
+    const { data, error } = await supabase
+      .from('prompts')
+      .select('*')
+      .eq('user_id', userId)
+      .order('order_index', { ascending: true });
+
+    if (error) {
+      console.error('❌ Error fetching prompts:', error);
+      return { data: null, error };
+    }
+
+    return { data, error: null };
+  } catch (error: any) {
+    console.error('❌ Exception in getUserPrompts:', error);
+    return { data: null, error };
+  }
+};
+
+export const createPrompt = async (question: string, answer: string, orderIndex: number) => {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) {
+      return { data: null, error: { message: 'Not authenticated' } };
+    }
+
+    const userId = session.user.id;
+
+    const { data, error } = await supabase
+      .from('prompts')
+      .insert([
+        {
+          user_id: userId,
+          question,
+          answer,
+          order_index: orderIndex,
+        },
+      ])
+      .select()
+      .single();
+
+    if (error) {
+      console.error('❌ Error creating prompt:', error);
+      return { data: null, error };
+    }
+
+    return { data, error: null };
+  } catch (error: any) {
+    console.error('❌ Exception in createPrompt:', error);
+    return { data: null, error };
+  }
+};
+
+export const updatePrompt = async (promptId: string, question: string, answer: string) => {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) {
+      return { data: null, error: { message: 'Not authenticated' } };
+    }
+
+    const { data, error } = await supabase
+      .from('prompts')
+      .update({
+        question,
+        answer,
+      })
+      .eq('id', promptId)
+      .select()
+      .single();
+
+    if (error) {
+      console.error('❌ Error updating prompt:', error);
+      return { data: null, error };
+    }
+
+    return { data, error: null };
+  } catch (error: any) {
+    console.error('❌ Exception in updatePrompt:', error);
+    return { data: null, error };
+  }
+};
+
+export const deletePrompt = async (promptId: string) => {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) {
+      return { data: null, error: { message: 'Not authenticated' } };
+    }
+
+    const { data, error } = await supabase
+      .from('prompts')
+      .delete()
+      .eq('id', promptId)
+      .select()
+      .single();
+
+    if (error) {
+      console.error('❌ Error deleting prompt:', error);
+      return { data: null, error };
+    }
+
+    return { data, error: null };
+  } catch (error: any) {
+    console.error('❌ Exception in deletePrompt:', error);
     return { data: null, error };
   }
 };

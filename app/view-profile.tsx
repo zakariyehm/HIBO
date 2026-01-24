@@ -4,7 +4,7 @@
 
 import { Toast } from '@/components/Toast';
 import { Colors } from '@/constants/theme';
-import { blockUser, getCurrentUser, getUserPosts, getUserProfile, isUserBlocked, Post, recordProfileView } from '@/lib/supabase';
+import { blockUser, getCurrentUser, getUserPosts, getUserProfile, getUserPrompts, isUserBlocked, Post, recordProfileView } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -63,6 +63,7 @@ export default function ViewProfileScreen() {
   const [isBlocked, setIsBlocked] = useState(false);
   const [isCurrentUser, setIsCurrentUser] = useState(false);
   const [posts, setPosts] = useState<Post[]>([]);
+  const [prompts, setPrompts] = useState<Array<{ question: string; answer: string }>>([]);
 
   const showToast = (message: string, type: 'info' | 'error' | 'success' = 'info') => {
     setToastMessage(message);
@@ -114,6 +115,12 @@ export default function ViewProfileScreen() {
       if (data) {
         setProfile(data);
         // console.log('✅ Profile loaded:', data.first_name, data.last_name);
+        
+        // Fetch prompts
+        const { data: promptsData } = await getUserPrompts(userId);
+        if (promptsData) {
+          setPrompts(promptsData.map((p: any) => ({ question: p.question, answer: p.answer })));
+        }
       } else {
         showToast('Profile not found', 'error');
       }
@@ -269,9 +276,11 @@ export default function ViewProfileScreen() {
         {/* Background Check Sections */}
         
         {/* Personal Information */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>PERSONAL INFORMATION</Text>
+        <View style={styles.sectionContainer}>
+          <View style={styles.sectionTitleCard}>
+            <View style={styles.sectionTitleHeader}>
+              <Text style={styles.sectionTitleText}>PERSONAL INFORMATION</Text>
+            </View>
           </View>
           <View style={styles.sectionContent}>
             {profile.age && (
@@ -291,9 +300,11 @@ export default function ViewProfileScreen() {
 
         {/* Professional Background */}
         {(profile.profession || profile.education_level) && (
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>PROFESSIONAL BACKGROUND</Text>
+          <View style={styles.sectionContainer}>
+            <View style={styles.sectionTitleCard}>
+              <View style={styles.sectionTitleHeader}>
+                <Text style={styles.sectionTitleText}>PROFESSIONAL BACKGROUND</Text>
+              </View>
             </View>
             <View style={styles.sectionContent}>
               {profile.profession && (
@@ -308,9 +319,11 @@ export default function ViewProfileScreen() {
 
         {/* Bio/Description */}
         {(profile.bio || profile.bio_title) && (
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>DESCRIPTION</Text>
+          <View style={styles.sectionContainer}>
+            <View style={styles.sectionTitleCard}>
+              <View style={styles.sectionTitleHeader}>
+                <Text style={styles.sectionTitleText}>DESCRIPTION</Text>
+              </View>
             </View>
             <View style={styles.sectionContent}>
               {profile.bio_title && (
@@ -325,9 +338,11 @@ export default function ViewProfileScreen() {
 
         {/* Relationship Status */}
         {(profile.looking_for || profile.interested_in || profile.marriage_know_time || profile.marriage_married_time) && (
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>RELATIONSHIP STATUS</Text>
+          <View style={styles.sectionContainer}>
+            <View style={styles.sectionTitleCard}>
+              <View style={styles.sectionTitleHeader}>
+                <Text style={styles.sectionTitleText}>RELATIONSHIP STATUS</Text>
+              </View>
             </View>
             <View style={styles.sectionContent}>
               {profile.looking_for && (
@@ -348,9 +363,11 @@ export default function ViewProfileScreen() {
 
         {/* Lifestyle */}
         {(profile.smoke || profile.has_children || profile.grow_up) && (
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>LIFESTYLE</Text>
+          <View style={styles.sectionContainer}>
+            <View style={styles.sectionTitleCard}>
+              <View style={styles.sectionTitleHeader}>
+                <Text style={styles.sectionTitleText}>LIFESTYLE</Text>
+              </View>
             </View>
             <View style={styles.sectionContent}>
               {profile.smoke && (
@@ -368,9 +385,11 @@ export default function ViewProfileScreen() {
 
         {/* Interests */}
         {profile.interests && profile.interests.length > 0 && (
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>INTERESTS</Text>
+          <View style={styles.sectionContainer}>
+            <View style={styles.sectionTitleCard}>
+              <View style={styles.sectionTitleHeader}>
+                <Text style={styles.sectionTitleText}>INTERESTS</Text>
+              </View>
             </View>
             <View style={styles.sectionContent}>
               <Text style={styles.sectionText}>{profile.interests.join(', ')}</Text>
@@ -380,12 +399,35 @@ export default function ViewProfileScreen() {
 
         {/* Personality Traits */}
         {profile.personality && profile.personality.length > 0 && (
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>PERSONALITY TRAITS</Text>
+          <View style={styles.sectionContainer}>
+            <View style={styles.sectionTitleCard}>
+              <View style={styles.sectionTitleHeader}>
+                <Text style={styles.sectionTitleText}>PERSONALITY TRAITS</Text>
+              </View>
             </View>
             <View style={styles.sectionContent}>
               <Text style={styles.sectionText}>{profile.personality.join(', ')}</Text>
+            </View>
+          </View>
+        )}
+
+        {/* Prompts Section */}
+        {prompts.length > 0 && (
+          <View style={styles.promptsSection}>
+            {/* Title Card with Purple Header */}
+            <View style={styles.promptsTitleCard}>
+              <View style={styles.promptsTitleHeader}>
+                <Text style={styles.promptsTitleText}>PROMPTS</Text>
+              </View>
+            </View>
+            {/* Prompt Cards without borders */}
+            <View style={styles.promptsList}>
+              {prompts.map((prompt, index) => (
+                <View key={index} style={styles.promptCard}>
+                  <Text style={styles.promptQuestion}>{prompt.question}</Text>
+                  <Text style={styles.promptAnswer}>{prompt.answer}</Text>
+                </View>
+              ))}
             </View>
           </View>
         )}
@@ -534,20 +576,23 @@ const styles = StyleSheet.create({
     borderColor: black,
   },
   // Section with purple header and white content
-  section: {
-    marginBottom: 0,
+  sectionContainer: {
+    marginBottom: 20,
     marginHorizontal: 16,
   },
-  sectionHeader: {
-    backgroundColor: purple,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    borderWidth: 2,
+  sectionTitleCard: {
+    backgroundColor: white,
+    borderWidth: 1,
     borderColor: black,
-    borderBottomWidth: 0,
+    marginBottom: 12,
   },
-  sectionTitle: {
-    fontSize: 14,
+  sectionTitleHeader: {
+    backgroundColor: purple,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+  },
+  sectionTitleText: {
+    fontSize: 16,
     fontWeight: '700',
     color: black,
     textTransform: 'uppercase',
@@ -556,16 +601,56 @@ const styles = StyleSheet.create({
   sectionContent: {
     backgroundColor: white,
     padding: 16,
-    borderWidth: 2,
-    borderColor: black,
-    borderTopWidth: 0,
-    marginBottom: 20,
+    marginBottom: 0,
   },
   sectionText: {
     fontSize: 16,
     color: black,
     marginBottom: 8,
     lineHeight: 22,
+  },
+  promptsSection: {
+    marginBottom: 20,
+    marginHorizontal: 16,
+  },
+  promptsTitleCard: {
+    backgroundColor: white,
+    borderWidth: 1,
+    borderColor: black,
+    marginBottom: 12,
+  },
+  promptsTitleHeader: {
+    backgroundColor: purple,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+  },
+  promptsTitleText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: black,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  promptsList: {
+    gap: 12,
+  },
+  promptCard: {
+    padding: 16,
+    backgroundColor: white,
+    marginBottom: 12,
+  },
+  promptQuestion: {
+    fontSize: 14,
+    color: Colors.textLight,
+    fontWeight: '400',
+    marginBottom: 12,
+  },
+  promptAnswer: {
+    fontSize: 24,
+    color: black,
+    fontWeight: '700',
+    lineHeight: 32,
+    letterSpacing: -0.5,
   },
   postsSection: {
     marginBottom: 20,

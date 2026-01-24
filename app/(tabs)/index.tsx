@@ -1,10 +1,11 @@
 import { AppHeader } from '@/components/app-header';
 import { PostCard } from '@/components/post-card';
 import { Colors } from '@/constants/theme';
-import { getAllUserProfiles, getCurrentUser, getUserProfile, supabase, updateLastActive } from '@/lib/supabase';
-import { useFocusEffect } from 'expo-router';
+import { getAllUserProfiles, getCurrentUser, getUserProfile, getUserPrompts, isPremiumUser, supabase, updateLastActive } from '@/lib/supabase';
+import { Ionicons } from '@expo/vector-icons';
+import { router, useFocusEffect } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, AppState, AppStateStatus, RefreshControl, ScrollView, StatusBar, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, AppState, AppStateStatus, Modal, RefreshControl, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 interface UserProfile {
   id: string;
@@ -23,13 +24,86 @@ interface UserProfile {
 
 export default function HomeScreen() {
   const [userProfiles, setUserProfiles] = useState<UserProfile[]>([]);
+  const [allProfiles, setAllProfiles] = useState<UserProfile[]>([]); // Store all unfiltered profiles
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [showFilterModal, setShowFilterModal] = useState(false);
+  const [ageRange, setAgeRange] = useState({ min: 18, max: 100 });
+  const [filters, setFilters] = useState({
+    education: [] as string[],
+    height: { min: 100, max: 250 },
+    interests: [] as string[],
+    personality: [] as string[],
+    status: 'all' as 'all' | 'online' | 'offline', // Device status filter
+  });
+  const [filtersApplied, setFiltersApplied] = useState(false); // Track if filters are applied
+  const [showLimitModal, setShowLimitModal] = useState(false);
+  const [matchLimitInfo, setMatchLimitInfo] = useState<{ waitingCount: number; limit: number } | null>(null);
+  const [isPremium, setIsPremium] = useState(false);
 
   const appState = useRef(AppState.currentState);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const statusRefreshRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Function to apply filters to profiles
+  const applyFilters = useCallback((profilesToFilter: UserProfile[]) => {
+    let filtered = [...profilesToFilter];
+
+    // Filter by age range
+    filtered = filtered.filter((profile: any) => {
+      const profileAge = profile.age || 0;
+      return profileAge >= ageRange.min && profileAge <= ageRange.max;
+    });
+
+    // Filter by advanced filters
+    if (filters.education.length > 0) {
+      filtered = filtered.filter((profile: any) => 
+        filters.education.includes(profile.education_level)
+      );
+    }
+    
+    if (filters.height.min > 100 || filters.height.max < 250) {
+      filtered = filtered.filter((profile: any) => {
+        const profileHeight = profile.height || 0;
+        return profileHeight >= filters.height.min && profileHeight <= filters.height.max;
+      });
+    }
+    
+    if (filters.interests.length > 0) {
+      filtered = filtered.filter((profile: any) => {
+        if (!profile.interests || !Array.isArray(profile.interests)) return false;
+        return filters.interests.some(interest => profile.interests.includes(interest));
+      });
+    }
+    
+    if (filters.personality.length > 0) {
+      filtered = filtered.filter((profile: any) => {
+        if (!profile.personality || !Array.isArray(profile.personality)) return false;
+        return filters.personality.some(trait => profile.personality.includes(trait));
+      });
+    }
+
+    // Filter by device status (online/offline)
+    if (filters.status !== 'all') {
+      filtered = filtered.filter((profile: any) => {
+        if (!profile.last_active) return filters.status === 'offline';
+        
+        const lastActiveTime = new Date(profile.last_active).getTime();
+        const now = Date.now();
+        const oneMinute = 1 * 60 * 1000; // 1 minute for online status
+        const isOnline = lastActiveTime > (now - oneMinute);
+        
+        if (filters.status === 'online') {
+          return isOnline;
+        } else {
+          return !isOnline;
+        }
+      });
+    }
+
+    setUserProfiles(filtered);
+  }, [ageRange, filters]);
 
   useEffect(() => {
     fetchUserProfiles();
@@ -203,7 +277,7 @@ export default function HomeScreen() {
             profile.bio.trim().length > 0
         );
 
-        // Filter by gender preference (dating app logic)
+        // Filter by gender preference (dating app logic) - Always apply this
         if (currentUserInterest) {
           validProfiles = validProfiles.filter((profile: any) => {
             // If user is interested in "Women", only show Female profiles
@@ -219,8 +293,6 @@ export default function HomeScreen() {
           });
           // console.log(`🎯 Filtered by interest "${currentUserInterest}": ${validProfiles.length} profiles`);
         }
-        
-        // console.log(`✅ Loaded ${validProfiles.length} user profiles`);
         
         // Sort profiles: Active users first, then by last_active, then by created_at
         const profiles = (validProfiles as UserProfile[]).sort((a, b) => {
@@ -244,7 +316,15 @@ export default function HomeScreen() {
           return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
         });
         
-        setUserProfiles(profiles);
+        // Store all unfiltered profiles
+        setAllProfiles(profiles);
+        
+        // Apply filters only if filters are applied
+        if (filtersApplied) {
+          applyFilters(profiles);
+        } else {
+          setUserProfiles(profiles);
+        }
       } else {
         // console.log('⚠️  No user profiles found');
         setUserProfiles([]);
@@ -294,10 +374,10 @@ export default function HomeScreen() {
       <AppHeader
         title="For you"
         onActionPress={() => {
-          // Handle action button press (e.g., create new post)
-          // console.log('Action button pressed');
+          // Open filter modal
+          setShowFilterModal(true);
         }}
-        actionIcon="add-outline"
+        actionIcon="options-outline"
       />
       
       {loading ? (
@@ -351,7 +431,21 @@ export default function HomeScreen() {
                   commentCount={0}
                   onShare={handleShare}
                   onComment={handleComment}
-                  onLike={(userId) => {
+                  onLike={async (userId) => {
+                    // Check limit before allowing like
+                    const { checkMatchLimit } = await import('@/lib/supabase');
+                    const limitCheck = await checkMatchLimit();
+                    
+                    if (limitCheck.reached) {
+                      // Show blocking modal
+                      setMatchLimitInfo({
+                        waitingCount: limitCheck.waitingCount,
+                        limit: limitCheck.limit,
+                      });
+                      setShowLimitModal(true);
+                      return; // Don't remove from list, don't like
+                    }
+                    
                     // Remove liked user from the list
                     setUserProfiles(prev => prev.filter(p => p.id !== userId));
                   }}
@@ -369,6 +463,327 @@ export default function HomeScreen() {
           })}
         </ScrollView>
       )}
+
+      {/* Filter Modal */}
+      <Modal
+        visible={showFilterModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowFilterModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Discovery Settings</Text>
+              <TouchableOpacity
+                onPress={() => setShowFilterModal(false)}
+                style={styles.closeButton}
+              >
+                <Ionicons name="close" size={24} color={Colors.textDark} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.modalScrollView} showsVerticalScrollIndicator={false}>
+              {/* Age Range */}
+              <View style={styles.filterSection}>
+                <Text style={styles.filterLabel}>Age Range</Text>
+                <View style={styles.ageRangeContainer}>
+                  <View style={styles.ageInputContainer}>
+                    <Text style={styles.ageLabel}>Min</Text>
+                    <View style={styles.ageInput}>
+                      <Text style={styles.ageValue}>{ageRange.min}</Text>
+                    </View>
+                    <View style={styles.ageButtons}>
+                      <TouchableOpacity
+                        style={styles.ageButton}
+                        onPress={() => setAgeRange({ ...ageRange, min: Math.max(18, ageRange.min - 1) })}
+                      >
+                        <Ionicons name="remove" size={16} color={Colors.textDark} />
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.ageButton}
+                        onPress={() => setAgeRange({ ...ageRange, min: Math.min(ageRange.max - 1, ageRange.min + 1) })}
+                      >
+                        <Ionicons name="add" size={16} color={Colors.textDark} />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                  <View style={styles.ageInputContainer}>
+                    <Text style={styles.ageLabel}>Max</Text>
+                    <View style={styles.ageInput}>
+                      <Text style={styles.ageValue}>{ageRange.max}</Text>
+                    </View>
+                    <View style={styles.ageButtons}>
+                      <TouchableOpacity
+                        style={styles.ageButton}
+                        onPress={() => setAgeRange({ ...ageRange, max: Math.max(ageRange.min + 1, ageRange.max - 1) })}
+                      >
+                        <Ionicons name="remove" size={16} color={Colors.textDark} />
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.ageButton}
+                        onPress={() => setAgeRange({ ...ageRange, max: Math.min(100, ageRange.max + 1) })}
+                      >
+                        <Ionicons name="add" size={16} color={Colors.textDark} />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                </View>
+              </View>
+
+              {/* Height Range */}
+              <View style={styles.filterSection}>
+                <Text style={styles.filterLabel}>Height (cm)</Text>
+                <View style={styles.ageRangeContainer}>
+                  <View style={styles.ageInputContainer}>
+                    <Text style={styles.ageLabel}>Min</Text>
+                    <View style={styles.ageInput}>
+                      <Text style={styles.ageValue}>{filters.height.min}</Text>
+                    </View>
+                    <View style={styles.ageButtons}>
+                      <TouchableOpacity
+                        style={styles.ageButton}
+                        onPress={() => setFilters({ ...filters, height: { ...filters.height, min: Math.max(100, filters.height.min - 5) } })}
+                      >
+                        <Ionicons name="remove" size={16} color={Colors.textDark} />
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.ageButton}
+                        onPress={() => setFilters({ ...filters, height: { ...filters.height, min: Math.min(filters.height.max - 5, filters.height.min + 5) } })}
+                      >
+                        <Ionicons name="add" size={16} color={Colors.textDark} />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                  <View style={styles.ageInputContainer}>
+                    <Text style={styles.ageLabel}>Max</Text>
+                    <View style={styles.ageInput}>
+                      <Text style={styles.ageValue}>{filters.height.max}</Text>
+                    </View>
+                    <View style={styles.ageButtons}>
+                      <TouchableOpacity
+                        style={styles.ageButton}
+                        onPress={() => setFilters({ ...filters, height: { ...filters.height, max: Math.max(filters.height.min + 5, filters.height.max - 5) } })}
+                      >
+                        <Ionicons name="remove" size={16} color={Colors.textDark} />
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.ageButton}
+                        onPress={() => setFilters({ ...filters, height: { ...filters.height, max: Math.min(250, filters.height.max + 5) } })}
+                      >
+                        <Ionicons name="add" size={16} color={Colors.textDark} />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                </View>
+              </View>
+
+              {/* Education Level */}
+              <View style={styles.filterSection}>
+                <Text style={styles.filterLabel}>Education Level</Text>
+                <View style={styles.chipContainer}>
+                  {['High school', 'Non-degree qualification', 'Undergraduate degree', 'Postgraduate degree', 'Doctorate', 'Other education level'].map((edu) => (
+                    <TouchableOpacity
+                      key={edu}
+                      style={[
+                        styles.chip,
+                        filters.education.includes(edu) && styles.chipSelected,
+                      ]}
+                      onPress={() => {
+                        if (filters.education.includes(edu)) {
+                          setFilters({ ...filters, education: filters.education.filter(e => e !== edu) });
+                        } else {
+                          setFilters({ ...filters, education: [...filters.education, edu] });
+                        }
+                      }}
+                    >
+                      <Text style={[
+                        styles.chipText,
+                        filters.education.includes(edu) && styles.chipTextSelected,
+                      ]}>
+                        {edu}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+
+              {/* Interests */}
+              <View style={styles.filterSection}>
+                <Text style={styles.filterLabel}>Interests</Text>
+                <Text style={styles.filterSubtext}>Select interests to match with</Text>
+                <View style={styles.chipContainer}>
+                  {['Travel', 'Music', 'Sports', 'Food', 'Art', 'Movies', 'Reading', 'Fitness', 'Photography', 'Dancing', 'Cooking', 'Gaming'].map((interest) => (
+                    <TouchableOpacity
+                      key={interest}
+                      style={[
+                        styles.chip,
+                        filters.interests.includes(interest) && styles.chipSelected,
+                      ]}
+                      onPress={() => {
+                        if (filters.interests.includes(interest)) {
+                          setFilters({ ...filters, interests: filters.interests.filter(i => i !== interest) });
+                        } else {
+                          setFilters({ ...filters, interests: [...filters.interests, interest] });
+                        }
+                      }}
+                    >
+                      <Text style={[
+                        styles.chipText,
+                        filters.interests.includes(interest) && styles.chipTextSelected,
+                      ]}>
+                        {interest}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+
+              {/* Device Status Filter */}
+              <View style={styles.filterSection}>
+                <Text style={styles.filterLabel}>Device Status</Text>
+                <View style={styles.chipContainer}>
+                  {['all', 'online', 'offline'].map((status) => (
+                    <TouchableOpacity
+                      key={status}
+                      style={[
+                        styles.chip,
+                        filters.status === status && styles.chipSelected,
+                      ]}
+                      onPress={() => {
+                        setFilters({ ...filters, status: status as 'all' | 'online' | 'offline' });
+                      }}
+                    >
+                      <Text style={[
+                        styles.chipText,
+                        filters.status === status && styles.chipTextSelected,
+                      ]}>
+                        {status === 'all' ? 'All' : status === 'online' ? 'Online Only' : 'Offline Only'}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+
+              {/* Personality Traits */}
+              <View style={styles.filterSection}>
+                <Text style={styles.filterLabel}>Personality Traits</Text>
+                <View style={styles.chipContainer}>
+                  {['Adventurous', 'Creative', 'Funny', 'Intelligent', 'Kind', 'Confident', 'Ambitious', 'Romantic', 'Outgoing', 'Thoughtful'].map((trait) => (
+                    <TouchableOpacity
+                      key={trait}
+                      style={[
+                        styles.chip,
+                        filters.personality.includes(trait) && styles.chipSelected,
+                      ]}
+                      onPress={() => {
+                        if (filters.personality.includes(trait)) {
+                          setFilters({ ...filters, personality: filters.personality.filter(p => p !== trait) });
+                        } else {
+                          setFilters({ ...filters, personality: [...filters.personality, trait] });
+                        }
+                      }}
+                    >
+                      <Text style={[
+                        styles.chipText,
+                        filters.personality.includes(trait) && styles.chipTextSelected,
+                      ]}>
+                        {trait}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+            </ScrollView>
+
+            <View style={styles.modalFooter}>
+              <TouchableOpacity
+                style={styles.resetButton}
+                onPress={() => {
+                  setAgeRange({ min: 18, max: 100 });
+                  setFilters({
+                    education: [],
+                    height: { min: 100, max: 250 },
+                    interests: [],
+                    personality: [],
+                    status: 'all',
+                  });
+                  setFiltersApplied(false);
+                  setUserProfiles(allProfiles.length > 0 ? allProfiles : userProfiles);
+                }}
+              >
+                <Text style={styles.resetButtonText}>Reset</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.applyButton}
+                onPress={() => {
+                  setFiltersApplied(true);
+                  applyFilters(allProfiles.length > 0 ? allProfiles : userProfiles);
+                  setShowFilterModal(false);
+                }}
+              >
+                <Text style={styles.applyButtonText}>Apply Filters</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Match Limit Blocking Modal (Tinder/Hinge style) */}
+      <Modal
+        visible={showLimitModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowLimitModal(false)}
+      >
+        <View style={styles.limitModalOverlay}>
+          <View style={styles.limitModalContent}>
+            <View style={styles.limitModalHeader}>
+              <Ionicons name="lock-closed" size={32} color={Colors.primary} />
+              <Text style={styles.limitModalTitle}>You've reached your limit</Text>
+            </View>
+            
+            <Text style={styles.limitModalText}>
+              You have {matchLimitInfo?.waitingCount || 0} people waiting for a reply. Reply to your matches or end chats before you can send more likes.
+            </Text>
+
+            <View style={styles.limitModalActions}>
+              <TouchableOpacity
+                style={styles.limitModalButton}
+                onPress={() => {
+                  setShowLimitModal(false);
+                  router.push('/(tabs)/match');
+                }}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="chatbubbles" size={20} color={Colors.cardBackground} />
+                <Text style={styles.limitModalButtonText}>Go to Matches</Text>
+              </TouchableOpacity>
+              
+              {!isPremium && (
+                <TouchableOpacity
+                  style={[styles.limitModalButton, styles.premiumButton]}
+                  onPress={() => {
+                    setShowLimitModal(false);
+                    router.push('/premium');
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="star" size={20} color={Colors.cardBackground} />
+                  <Text style={styles.limitModalButtonText}>Upgrade to Premium</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+
+            <TouchableOpacity
+              style={styles.limitModalClose}
+              onPress={() => setShowLimitModal(false)}
+            >
+              <Text style={styles.limitModalCloseText}>Maybe Later</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -418,5 +833,220 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.borderLight,
     marginVertical: 16,
     marginHorizontal: 0,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: Colors.background,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '90%',
+    paddingBottom: 20,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.borderLight,
+  },
+  modalTitle: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: Colors.textDark,
+  },
+  closeButton: {
+    padding: 4,
+  },
+  modalScrollView: {
+    maxHeight: 500,
+  },
+  filterSection: {
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.borderLight,
+  },
+  filterLabel: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: Colors.textDark,
+    marginBottom: 12,
+  },
+  filterSubtext: {
+    fontSize: 14,
+    color: Colors.textLight,
+    marginBottom: 12,
+  },
+  ageRangeContainer: {
+    flexDirection: 'row',
+    gap: 16,
+  },
+  ageInputContainer: {
+    flex: 1,
+  },
+  ageLabel: {
+    fontSize: 14,
+    color: Colors.textLight,
+    marginBottom: 8,
+  },
+  ageInput: {
+    backgroundColor: Colors.cardBackground,
+    borderRadius: 8,
+    padding: 12,
+    alignItems: 'center',
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  ageValue: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: Colors.textDark,
+  },
+  ageButtons: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  ageButton: {
+    flex: 1,
+    backgroundColor: Colors.cardBackground,
+    borderRadius: 6,
+    padding: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  chipContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  chip: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
+    backgroundColor: Colors.cardBackground,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  chipSelected: {
+    backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
+  },
+  chipText: {
+    fontSize: 14,
+    color: Colors.textDark,
+    fontWeight: '500',
+  },
+  chipTextSelected: {
+    color: '#FFFFFF',
+  },
+  modalFooter: {
+    flexDirection: 'row',
+    padding: 20,
+    gap: 12,
+    borderTopWidth: 1,
+    borderTopColor: Colors.borderLight,
+  },
+  resetButton: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 8,
+    backgroundColor: Colors.cardBackground,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  resetButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: Colors.textDark,
+  },
+  applyButton: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 8,
+    backgroundColor: Colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  applyButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  limitModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  limitModalContent: {
+    backgroundColor: Colors.cardBackground,
+    borderRadius: 20,
+    padding: 24,
+    width: '100%',
+    maxWidth: 400,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  limitModalHeader: {
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  limitModalTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: Colors.textDark,
+    marginTop: 12,
+    textAlign: 'center',
+  },
+  limitModalText: {
+    fontSize: 16,
+    color: Colors.textLight,
+    textAlign: 'center',
+    lineHeight: 24,
+    marginBottom: 24,
+  },
+  limitModalActions: {
+    gap: 12,
+    marginBottom: 16,
+  },
+  limitModalButton: {
+    backgroundColor: Colors.primary,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  premiumButton: {
+    backgroundColor: '#D5AFFD',
+  },
+  limitModalButtonText: {
+    color: Colors.cardBackground,
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  limitModalClose: {
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  limitModalCloseText: {
+    fontSize: 15,
+    color: Colors.textLight,
+    fontWeight: '500',
   },
 });

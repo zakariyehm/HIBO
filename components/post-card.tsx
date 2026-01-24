@@ -1,9 +1,9 @@
 import { MatchPopup } from '@/components/MatchPopup';
 import { Colors } from '@/constants/theme';
-import { blockUser, checkForMatch, getUserStatus, likeUser, passUser, recordProfileView, supabase } from '@/lib/supabase';
+import { blockUser, checkForMatch, getUserPrompts, getUserStatus, likeUser, passUser, recordProfileView, supabase } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Alert, Dimensions, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -22,6 +22,7 @@ interface PostCardProps {
   bio_title?: string; // Bio title (Hinge-style)
   bio?: string; // Bio text (Hinge-style)
   nationality?: string[]; // Array of nationalities
+  prompts?: Array<{ question: string; answer: string }>; // Prompts/Questions (Hinge-style)
   commentCount?: number;
   userId?: string; // User ID for profile navigation
   onShare?: () => void;
@@ -45,6 +46,7 @@ export function PostCard({
   bio_title,
   bio,
   nationality,
+  prompts,
   commentCount = 0,
   userId,
   onShare,
@@ -58,6 +60,18 @@ export function PostCard({
   const [showMenu, setShowMenu] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false); // Single state for both actions
   const [showMatchPopup, setShowMatchPopup] = useState(false);
+  const [userPrompts, setUserPrompts] = useState<Array<{ question: string; answer: string }>>(prompts || []);
+
+  // Fetch prompts if userId provided and prompts not passed
+  useEffect(() => {
+    if (userId && !prompts) {
+      getUserPrompts(userId).then(({ data }) => {
+        if (data) {
+          setUserPrompts(data.map((p: any) => ({ question: p.question, answer: p.answer })));
+        }
+      });
+    }
+  }, [userId, prompts]);
   
   // Use photos array if provided, otherwise fallback to postImage
   const imageArray = photos && photos.length > 0 ? photos : (postImage ? [postImage] : []);
@@ -73,39 +87,47 @@ export function PostCard({
     if (!userId || isProcessing) return;
     setIsProcessing(true);
 
+    // Check limit first (Tinder/Hinge style - block if limit reached)
+    const likeResult = await likeUser(userId);
+    
+    if (likeResult.error) {
+      // If limit reached, don't remove card - let parent handle modal
+      if (likeResult.error.message === 'MATCH_LIMIT_REACHED') {
+        setIsProcessing(false);
+        // Parent component will show blocking modal
+        return;
+      }
+      
+      console.error('❌ Error liking user:', likeResult.error);
+      setIsProcessing(false);
+      return;
+    }
+
     // OPTIMISTIC UPDATE - Remove card immediately (like Tinder - instant!)
     if (onLike) {
       onLike(userId);
     }
 
-    // Run operations in background (don't wait)
-    Promise.all([
-      likeUser(userId),
-      recordProfileView(userId)
-    ]).then(([likeResult]) => {
-      if (likeResult.error) {
-        console.error('❌ Error liking user:', likeResult.error);
-        return;
-      }
-
-      // Check for match in background (don't block UI)
-      supabase.auth.getSession().then(({ data: { session } }) => {
-        if (session?.user && userId) {
-          checkForMatch(session.user.id, userId).then((matchResult: any) => {
-            if (matchResult.data) {
-              // console.log('🎉 MATCH FOUND!');
-              setShowMatchPopup(true);
-            }
-          }).catch((err: any) => {
-            console.error('❌ Error checking match:', err);
-          });
-        }
-      });
-    }).catch((error) => {
-      console.error('❌ Exception in handleLike:', error);
-    }).finally(() => {
-      setIsProcessing(false);
+    // Record profile view in background
+    recordProfileView(userId).catch((error) => {
+      console.error('❌ Error recording profile view:', error);
     });
+
+    // Check for match in background (don't block UI)
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user && userId) {
+        checkForMatch(session.user.id, userId).then((matchResult: any) => {
+          if (matchResult.data) {
+            // console.log('🎉 MATCH FOUND!');
+            setShowMatchPopup(true);
+          }
+        }).catch((err: any) => {
+          console.error('❌ Error checking match:', err);
+        });
+      }
+    });
+    
+    setIsProcessing(false);
   };
 
   const handlePass = async () => {
@@ -327,6 +349,18 @@ export function PostCard({
             {!bio && postText && (
               <Text style={styles.bioText}>{postText}</Text>
             )}
+          </View>
+        )}
+
+        {/* Prompts Section - Hinge Style */}
+        {userPrompts && userPrompts.length > 0 && (
+          <View style={styles.promptsContainer}>
+            {userPrompts.map((prompt, index) => (
+              <View key={index} style={styles.promptCard}>
+                <Text style={styles.promptQuestion}>{prompt.question}</Text>
+                <Text style={styles.promptAnswer}>{prompt.answer}</Text>
+              </View>
+            ))}
           </View>
         )}
 
@@ -612,6 +646,30 @@ const styles = StyleSheet.create({
   },
   showMore: {
     color: Colors.textLight,
+  },
+  promptsContainer: {
+    marginBottom: 12,
+    gap: 12,
+  },
+  promptCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 0,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: Colors.borderLight,
+  },
+  promptQuestion: {
+    fontSize: 13,
+    color: Colors.textLight,
+    fontWeight: '400',
+    marginBottom: 8,
+  },
+  promptAnswer: {
+    fontSize: 20,
+    color: Colors.textDark,
+    fontWeight: '700',
+    lineHeight: 28,
+    letterSpacing: -0.5,
   },
 });
 
