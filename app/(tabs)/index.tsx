@@ -421,7 +421,7 @@ export default function HomeScreen() {
           // Open filter modal
           setShowFilterModal(true);
         }}
-        actionIcon="options-outline"
+        actionIcon="sparkles"
       />
       
       {loading ? (
@@ -430,9 +430,12 @@ export default function HomeScreen() {
           contentContainerStyle={styles.contentContainer}
           showsVerticalScrollIndicator={false}
         >
-          {/* Tinder-style skeleton loaders */}
+          {/* Skeleton loaders matching post card style */}
           {[1, 2, 3].map((i) => (
-            <PostCardSkeleton key={i} />
+            <React.Fragment key={i}>
+              {i > 1 && <View style={styles.divider} />}
+              <PostCardSkeleton />
+            </React.Fragment>
           ))}
         </ScrollView>
       ) : userProfiles.length === 0 ? (

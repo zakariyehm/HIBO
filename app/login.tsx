@@ -104,15 +104,26 @@ export default function LoginScreen() {
       const { data, error } = await signInWithEmail(email.trim(), password);
 
       if (error) {
-        console.error('❌ Sign in error:', error);
-        
         // Handle specific error messages
-        if (error.message.includes('Invalid login credentials')) {
+        const errorMessage = error.message || '';
+        const isExpectedError = 
+          errorMessage.includes('Invalid login credentials') ||
+          errorMessage.includes('Email not confirmed') ||
+          errorMessage.includes('Invalid email') ||
+          errorMessage.includes('User not found');
+        
+        // Only log unexpected errors
+        if (!isExpectedError) {
+          console.error('❌ Sign in error:', error);
+        }
+        
+        // Show user-friendly error messages
+        if (errorMessage.includes('Invalid login credentials')) {
           showNotification('Incorrect email or password. Please try again.', 'error');
-        } else if (error.message.includes('Email not confirmed')) {
+        } else if (errorMessage.includes('Email not confirmed')) {
           showNotification('Please verify your email address before signing in.', 'error');
         } else {
-          showNotification(error.message || 'Failed to sign in. Please try again.', 'error');
+          showNotification(errorMessage || 'Failed to sign in. Please try again.', 'error');
         }
         
         setIsLoading(false);

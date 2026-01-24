@@ -1,6 +1,7 @@
-import React from 'react';
-import { View, StyleSheet, TouchableOpacity, Text, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import React from 'react';
+import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 interface HeaderProps {
   logoSource?: any;
@@ -9,6 +10,7 @@ interface HeaderProps {
   onSharePress?: () => void;
   showNotificationDot?: boolean;
   showShareDot?: boolean;
+  showIcons?: boolean;
 }
 
 export function Header({
@@ -18,48 +20,58 @@ export function Header({
   onSharePress,
   showNotificationDot = true,
   showShareDot = true,
+  showIcons = true,
 }: HeaderProps) {
   return (
-    <View style={styles.container}>
-      {/* Logo on Left */}
-      <View style={styles.logoContainer}>
-        {logoSource ? (
-          <Image source={logoSource} style={styles.logoImage} />
-        ) : (
-          <Text style={styles.logoText}>{logoText}</Text>
+    <SafeAreaView style={styles.safeArea} edges={['top']}>
+      <View style={styles.container}>
+        {/* Logo on Left */}
+        <View style={styles.logoContainer}>
+          {logoSource ? (
+            <Image source={logoSource} style={styles.logoImage} />
+          ) : (
+            <Text style={styles.logoText}>{logoText}</Text>
+          )}
+        </View>
+
+        {/* Icons on Right */}
+        {showIcons && (
+          <View style={styles.iconButtonsContainer}>
+            <TouchableOpacity
+              style={styles.iconButton}
+              onPress={onNotificationPress}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="notifications" size={20} color="#000" />
+              {showNotificationDot && <View style={styles.indicatorDot} />}
+            </TouchableOpacity>
+            
+            <TouchableOpacity
+              style={styles.iconButton}
+              onPress={onSharePress}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="paper-plane" size={20} color="#000" />
+              {showShareDot && <View style={styles.indicatorDot} />}
+            </TouchableOpacity>
+          </View>
         )}
       </View>
-
-      {/* Icons on Right */}
-      <View style={styles.iconButtonsContainer}>
-        <TouchableOpacity
-          style={styles.iconButton}
-          onPress={onNotificationPress}
-          activeOpacity={0.7}
-        >
-          <Ionicons name="notifications" size={20} color="#000" />
-          {showNotificationDot && <View style={styles.indicatorDot} />}
-        </TouchableOpacity>
-        
-        <TouchableOpacity
-          style={styles.iconButton}
-          onPress={onSharePress}
-          activeOpacity={0.7}
-        >
-          <Ionicons name="paper-plane" size={20} color="#000" />
-          {showShareDot && <View style={styles.indicatorDot} />}
-        </TouchableOpacity>
-      </View>
-    </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safeArea: {
+    backgroundColor: '#FFFFFF',
+  },
   container: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     width: '100%',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
   },
   logoContainer: {
     flexDirection: 'row',

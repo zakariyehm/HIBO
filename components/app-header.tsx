@@ -45,7 +45,7 @@ export function AppHeader({
                 onPress={onActionPress}
                 activeOpacity={0.7}
               >
-                <Ionicons name={actionIcon as any} size={16} color="#FFFFFF" />
+                <Ionicons name={actionIcon as any} size={18} color="#FFFFFF" />
               </TouchableOpacity>
             )}
           </View>
@@ -100,12 +100,12 @@ export function AppHeader({
 
 const styles = StyleSheet.create({
   safeArea: {
-    backgroundColor: Colors.background,
+    backgroundColor: '#FFFFFF',
   },
   container: {
     paddingHorizontal: 16,
     paddingVertical: 12,
-    backgroundColor: Colors.background,
+    backgroundColor: '#FFFFFF',
     ...(Platform.OS === 'android' && {
       paddingTop: Platform.Version >= 23 ? 8 : 12,
     }),
@@ -172,10 +172,10 @@ const styles = StyleSheet.create({
     borderRadius: 1,
   },
   actionButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 6,
-    backgroundColor: '#2C2C2C', // Dark gray background
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    backgroundColor: '#363636', // Dark gray background matching screenshot
     alignItems: 'center',
     justifyContent: 'center',
   },

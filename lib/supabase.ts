@@ -52,6 +52,18 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   },
 });
 
+// Global auth state listener to handle refresh token errors gracefully
+supabase.auth.onAuthStateChange((event, session) => {
+  // Silently handle auth state changes
+  // Refresh token errors are expected when user is not logged in
+  if (event === 'TOKEN_REFRESHED') {
+    // Token refreshed successfully
+  } else if (event === 'SIGNED_OUT') {
+    // User signed out - this is normal
+  }
+  // Other events are handled normally
+});
+
 // Database types for type safety
 export interface UserProfile {
   id: string;
@@ -140,6 +152,20 @@ export const getCurrentUser = async () => {
     const { data: { session }, error: sessionError } = await supabase.auth.getSession();
     
     if (sessionError) {
+      // Handle refresh token errors gracefully (expected when user is not logged in)
+      const errorMessage = sessionError.message || '';
+      const isRefreshTokenError = 
+        errorMessage.includes('Invalid Refresh Token') ||
+        errorMessage.includes('Refresh Token Not Found') ||
+        errorMessage.includes('JWT expired') ||
+        sessionError.name === 'AuthApiError';
+      
+      if (isRefreshTokenError) {
+        // Silently handle - user just needs to log in again
+        return { user: null, error: null };
+      }
+      
+      // Log unexpected errors
       console.error('❌ Session error:', sessionError);
       return { user: null, error: sessionError };
     }
@@ -152,6 +178,20 @@ export const getCurrentUser = async () => {
     // console.log('✅ Session found:', session.user.id);
     return { user: session.user, error: null };
   } catch (error: any) {
+    // Handle refresh token errors in catch block too
+    const errorMessage = error?.message || '';
+    const isRefreshTokenError = 
+      errorMessage.includes('Invalid Refresh Token') ||
+      errorMessage.includes('Refresh Token Not Found') ||
+      errorMessage.includes('JWT expired') ||
+      error?.name === 'AuthApiError';
+    
+    if (isRefreshTokenError) {
+      // Silently handle - user just needs to log in again
+      return { user: null, error: null };
+    }
+    
+    // Log unexpected errors
     console.error('❌ Get current user error:', error);
     return { user: null, error };
   }
@@ -187,20 +227,38 @@ export const createUserProfile = async (userId: string, profileData: Partial<Use
 // Update user's last_active timestamp (call when user is active)
 export const updateLastActive = async (userId: string) => {
   try {
-    const { error } = await supabase
+    if (!userId) {
+      return { error: null }; // Silently skip if no userId
+    }
+
+    const { data, error } = await supabase
       .from('profiles')
       .update({ last_active: new Date().toISOString() })
-      .eq('id', userId);
+      .eq('id', userId)
+      .select()
+      .single();
     
     if (error) {
-      console.error('❌ Error updating last_active:', error);
+      // Only log non-permission errors (RLS errors are expected and can be ignored)
+      const errorCode = error.code;
+      const errorMessage = error.message || '';
+      const isExpectedError = 
+        errorCode === 'PGRST116' || 
+        errorCode === '42501' || 
+        errorMessage.includes('JWT expired') ||
+        errorMessage.includes('permission denied') ||
+        errorMessage.includes('row-level security');
+      
+      if (!isExpectedError) {
+        console.error('❌ Error updating last_active:', error);
+      }
       return { error };
     }
     
-    return { error: null };
+    return { data, error: null };
   } catch (error: any) {
-    console.error('❌ Exception updating last_active:', error);
-    return { error };
+    // Silently handle errors - don't spam console with expected errors
+    return { error: error?.message || error };
   }
 };
 

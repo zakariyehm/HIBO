@@ -1,4 +1,6 @@
 import { Colors } from '@/constants/theme';
+import { MessagesSkeleton } from '@/components/SkeletonLoader';
+import { Header } from '@/components/header';
 import { decryptMessage, deriveMatchKey } from '@/lib/encryption';
 import { getConversations, supabase } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
@@ -14,7 +16,6 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 
 interface Conversation {
   match: {
@@ -185,15 +186,10 @@ export default function MessagesScreen() {
 
   return (
     <View style={styles.container}>
-      <SafeAreaView style={styles.safeArea} edges={['top']}>
-        <Text style={styles.title}>Messages</Text>
-      </SafeAreaView>
+      <Header logoText="Messages" showIcons={false} />
 
       {loading && isInitialLoad ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={Colors.primary} />
-          <Text style={styles.loadingText}>Loading conversations...</Text>
-        </View>
+        <MessagesSkeleton />
       ) : conversations.length === 0 && !loading ? (
         <View style={styles.emptyContainer}>
           <View style={styles.emptyIconContainer}>
@@ -294,17 +290,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.background,
-  },
-  safeArea: {
-    backgroundColor: Colors.background,
-    paddingHorizontal: 16,
-    paddingBottom: 8,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: Colors.textDark,
-    marginBottom: 8,
   },
   loadingContainer: {
     flex: 1,

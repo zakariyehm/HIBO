@@ -1,4 +1,6 @@
 import { Colors } from '@/constants/theme';
+import { MatchSkeleton } from '@/components/SkeletonLoader';
+import { Header } from '@/components/header';
 import { getUserMatches, isPremiumUser } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
@@ -16,7 +18,6 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image as ExpoImage } from 'expo-image';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -152,19 +153,7 @@ export default function MatchScreen() {
 
   return (
     <View style={styles.container}>
-      <SafeAreaView style={styles.safeArea} edges={['top']}>
-        <View style={styles.header}>
-          <View>
-          <Text style={styles.title}>Matches</Text>
-          {matches.length > 0 && (
-              <Text style={styles.matchCount}>
-                {activeMatches.length} {activeMatches.length === 1 ? 'match' : 'matches'}
-                {expiredMatches.length > 0 && ` • ${expiredMatches.length} expired`}
-              </Text>
-          )}
-          </View>
-        </View>
-      </SafeAreaView>
+      <Header logoText="Matches" showIcons={false} />
 
       {loading ? (
         <View style={styles.loadingContainer}>
@@ -406,29 +395,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.background,
-  },
-  safeArea: {
-    backgroundColor: Colors.background,
-    paddingHorizontal: 16,
-    paddingBottom: 8,
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 8,
-  },
-  title: {
-    fontSize: 32,
-    fontWeight: '700',
-    color: Colors.textDark,
-    letterSpacing: -0.5,
-  },
-  matchCount: {
-    fontSize: 14,
-    color: Colors.textLight,
-    fontWeight: '500',
-    marginTop: 4,
   },
   loadingContainer: {
     flex: 1,

@@ -4,6 +4,7 @@
  */
 
 import { Toast } from '@/components/Toast';
+import { ProfileSkeleton } from '@/components/SkeletonLoader';
 import { Colors } from '@/constants/theme';
 import { createPost, createPrompt, deletePost, deletePrompt, getUserPosts, getUserProfile, getUserPrompts, Post, Prompt, PROMPT_QUESTIONS, signOut, supabase, updatePrompt, uploadPhotos } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
@@ -717,37 +718,7 @@ export default function ProfileScreen() {
   }, []);
 
   if (loading) {
-    return (
-      <ScrollView
-        style={{ flex: 1, backgroundColor: Colors.background }}
-        contentContainerStyle={{ padding: 16 }}
-      >
-        {/* Skeleton Header */}
-        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 20, gap: 12 }}>
-          <View style={{ width: 80, height: 80, borderRadius: 40, backgroundColor: Colors.borderLight }} />
-          <View style={{ flex: 1, gap: 8 }}>
-            <View style={{ width: '60%', height: 20, borderRadius: 4, backgroundColor: Colors.borderLight }} />
-            <View style={{ width: '40%', height: 16, borderRadius: 4, backgroundColor: Colors.borderLight }} />
-          </View>
-        </View>
-        
-        {/* Skeleton Photos */}
-        <View style={{ flexDirection: 'row', gap: 12, marginBottom: 20 }}>
-          {[1, 2, 3].map((i) => (
-            <View key={i} style={{ width: 100, height: 100, borderRadius: 8, backgroundColor: Colors.borderLight }} />
-          ))}
-        </View>
-        
-        {/* Skeleton Content */}
-        <View style={{ gap: 12 }}>
-          {[1, 2, 3, 4].map((i) => (
-            <View key={i} style={{ width: '100%', height: 16, borderRadius: 4, backgroundColor: Colors.borderLight }} />
-          ))}
-        </View>
-        
-        <ActivityIndicator size="large" color={Colors.primary} style={{ marginTop: 40 }} />
-      </ScrollView>
-    );
+    return <ProfileSkeleton />;
   }
 
   if (!userProfile) {

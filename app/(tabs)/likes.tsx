@@ -1,4 +1,6 @@
 import { Colors } from '@/constants/theme';
+import { LikesSkeleton } from '@/components/SkeletonLoader';
+import { Header } from '@/components/header';
 import { getReceivedLikes, isPremiumUser, likeUser, passUser, supabase } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
@@ -14,7 +16,6 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image as ExpoImage } from 'expo-image';
 
 interface ReceivedLike {
@@ -137,14 +138,7 @@ export default function LikesScreen() {
 
   return (
     <View style={styles.container}>
-      <SafeAreaView style={styles.safeArea} edges={['top']}>
-        <View style={styles.header}>
-          <Text style={styles.title}>Likes</Text>
-          {receivedLikes.length > 0 && (
-            <Text style={styles.count}>{receivedLikes.length} {receivedLikes.length === 1 ? 'like' : 'likes'}</Text>
-          )}
-        </View>
-      </SafeAreaView>
+      <Header logoText="Likes" showIcons={false} />
 
       {loading ? (
         <View style={styles.loadingContainer}>
@@ -291,27 +285,7 @@ export default function LikesScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.cardBackground,
-  },
-  safeArea: {
-    backgroundColor: Colors.cardBackground,
-    paddingHorizontal: 16,
-    paddingBottom: 8,
-  },
-  header: {
-    marginBottom: 8,
-  },
-  title: {
-    fontSize: 32,
-    fontWeight: '700',
-    color: Colors.textDark,
-    letterSpacing: -0.5,
-  },
-  count: {
-    fontSize: 14,
-    color: Colors.textLight,
-    fontWeight: '500',
-    marginTop: 4,
+    backgroundColor: Colors.background,
   },
   loadingContainer: {
     flex: 1,
