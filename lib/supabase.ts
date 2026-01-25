@@ -411,6 +411,48 @@ export const getAllUserProfiles = async (excludeUserId?: string) => {
   }
 };
 
+// Get user profiles with pagination (for infinite scroll - reduces load, faster app)
+export const getUserProfilesPaginated = async (
+  excludeUserId?: string,
+  opts: { limit?: number; offset?: number } = {}
+) => {
+  const { limit = 15, offset = 0 } = opts;
+  try {
+    const { data: blockedUsers } = await getBlockedUsers();
+    const blockedIds = blockedUsers || [];
+    const { data: viewedProfiles } = await getViewedProfiles();
+    const viewedIds = viewedProfiles || [];
+
+    let query = supabase
+      .from('profiles')
+      .select('id, first_name, last_name, location, bio, bio_title, photos, nationality, gender, interested_in, age, height, education_level, interests, personality, created_at, last_active')
+      .order('last_active', { ascending: false, nullsFirst: false })
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1);
+
+    if (excludeUserId) {
+      query = query.neq('id', excludeUserId);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      console.error('❌ Error fetching profiles (paginated):', error);
+      return { data: null, error, hasMore: false };
+    }
+
+    const filtered = (data || []).filter(
+      (p: any) => !blockedIds.includes(p.id) && !viewedIds.includes(p.id)
+    );
+    // hasMore: DB returned a full page, so there may be more
+    const hasMore = (data?.length ?? 0) >= limit;
+    return { data: filtered, error: null, hasMore };
+  } catch (e: any) {
+    console.error('❌ Exception getUserProfilesPaginated:', e);
+    return { data: null, error: e, hasMore: false };
+  }
+};
+
 // Upload images to Supabase Storage
 export const uploadImage = async (userId: string, imageUri: string, imageName: string, folder: string = 'photos') => {
   try {
@@ -599,6 +641,7 @@ export const canLikeUser = async (): Promise<{ canLike: boolean; remaining: numb
   }
 };
 
+// Idempotent: likes.upsert onConflict; daily_likes 23505 (duplicate) waa la qabtaa
 export const likeUser = async (likedUserId: string) => {
   try {
     const { data: { session } } = await supabase.auth.getSession();
@@ -738,6 +781,7 @@ export const likeUser = async (likedUserId: string) => {
   }
 };
 
+// Idempotent: upsert onConflict (laba jeer la yeero ma jabin)
 export const passUser = async (passedUserId: string) => {
   try {
     const { data: { session } } = await supabase.auth.getSession();
@@ -1123,6 +1167,70 @@ export const createSubscription = async ({
   }
 };
 
+// Create subscription from a successful Apple/Google in-app purchase.
+// Stores receipt data in subscription_phone (JSON) for future server-side validation.
+export const createSubscriptionFromIAP = async ({
+  planType,
+  paymentMethod,
+  transactionId,
+  transactionReceipt,
+  purchaseToken,
+}: {
+  planType: 'monthly' | 'yearly';
+  paymentMethod: 'apple_pay' | 'google_pay';
+  transactionId: string;
+  transactionReceipt?: string;
+  purchaseToken?: string;
+}) => {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) {
+      return { data: null, error: { message: 'Not authenticated' } };
+    }
+
+    const userId = session.user.id;
+    const now = new Date();
+    const trialEndDate = new Date(now);
+    trialEndDate.setDate(trialEndDate.getDate() + 3);
+    const expiresAt = new Date(trialEndDate);
+    if (planType === 'monthly') {
+      expiresAt.setMonth(expiresAt.getMonth() + 1);
+    } else {
+      expiresAt.setFullYear(expiresAt.getFullYear() + 1);
+    }
+
+    const iapJson = JSON.stringify({
+      iap: true,
+      transactionId,
+      ...(transactionReceipt && { transactionReceipt }),
+      ...(purchaseToken && { purchaseToken }),
+    });
+
+    const { data, error } = await supabase
+      .from('profiles')
+      .update({
+        is_premium: true,
+        premium_expires_at: expiresAt.toISOString(),
+        subscription_type: planType,
+        subscription_phone: iapJson,
+        subscription_start_date: trialEndDate.toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', userId)
+      .select()
+      .single();
+
+    if (error) {
+      console.error('❌ Error createSubscriptionFromIAP:', error);
+      return { data: null, error };
+    }
+    return { data, error: null };
+  } catch (error: any) {
+    console.error('❌ Exception in createSubscriptionFromIAP:', error);
+    return { data: null, error };
+  }
+};
+
 // Block and Unblock functions
 export const blockUser = async (blockedUserId: string) => {
   try {
@@ -1257,7 +1365,7 @@ export const isUserBlocked = async (userId: string) => {
   }
 };
 
-// Profile Views functions (like Tinder - once viewed, don't show again) - OPTIMIZED
+// Profile Views – idempotent: upsert + ignoreDuplicates (retry/double-tap ma jabin)
 export const recordProfileView = async (viewedUserId: string) => {
   try {
     const { data: { session } } = await supabase.auth.getSession();

@@ -1,12 +1,13 @@
 import { AppHeader } from '@/components/app-header';
+import { MatchPopup } from '@/components/MatchPopup';
 import { PostCard } from '@/components/post-card';
 import { PostCardSkeleton } from '@/components/SkeletonLoader';
 import { Colors } from '@/constants/theme';
-import { canLikeUser, getAllUserProfiles, getCurrentUser, getDailyLikeCount, getUserProfile, getUserPrompts, isPremiumUser, supabase, updateLastActive } from '@/lib/supabase';
+import { canLikeUser, checkForMatch, checkMatchLimit, getAllUserProfiles, getCurrentUser, getDailyLikeCount, getUserProfile, getUserPrompts, getUserProfilesPaginated, isPremiumUser, likeUser, recordProfileView, supabase, updateLastActive } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, AppState, AppStateStatus, Modal, RefreshControl, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, AppState, AppStateStatus, FlatList, Modal, RefreshControl, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 interface UserProfile {
   id: string;
@@ -21,6 +22,15 @@ interface UserProfile {
   interested_in?: string;
   created_at: string;
   last_active?: string | null;
+}
+
+function dedupById<T extends { id: string }>(arr: T[]): T[] {
+  const seen = new Set<string>();
+  return arr.filter((p) => {
+    if (seen.has(p.id)) return false;
+    seen.add(p.id);
+    return true;
+  });
 }
 
 export default function HomeScreen() {
@@ -45,8 +55,14 @@ export default function HomeScreen() {
   const [likeCount, setLikeCount] = useState({ remaining: Infinity, limit: Infinity });
   const [showLikeLimitModal, setShowLikeLimitModal] = useState(false);
   const [likeLimitInfo, setLikeLimitInfo] = useState<{ remaining: number; limit: number } | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMoreProfiles, setHasMoreProfiles] = useState(true);
+  const [showMatchPopup, setShowMatchPopup] = useState(false);
+  const [matchedUserName, setMatchedUserName] = useState('');
+  const [matchedUserPhoto, setMatchedUserPhoto] = useState<string | undefined>(undefined);
 
   const appState = useRef(AppState.currentState);
+  const currentUserInterestRef = useRef<string | null>(null);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const statusRefreshRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -277,85 +293,84 @@ export default function HomeScreen() {
           currentUserInterest = currentUserProfile.interested_in;
         }
       }
+      currentUserInterestRef.current = currentUserInterest;
 
-      // Fetch all user profiles (excluding current user) - OPTIMIZED
-      const { data, error } = await getAllUserProfiles(user?.id);
+      let data: any[] | null = null;
+      let hasMore = false;
 
-      if (error) {
-        console.error('❌ Error fetching profiles:', error);
-        if (!isRefresh) {
-          setLoading(false);
+      if (filtersApplied) {
+        // Filters on: fetch all, then apply filters (needs full list)
+        const res = await getAllUserProfiles(user?.id);
+        if (res.error) {
+          console.error('❌ Error fetching profiles:', res.error);
+          if (!isRefresh) setLoading(false);
+          return;
         }
-        return;
+        data = res.data;
+        hasMore = false;
+      } else {
+        // No filters: paginated fetch (faster, less data at once)
+        const res = await getUserProfilesPaginated(user?.id, { limit: 15, offset: 0 });
+        if (res.error) {
+          console.error('❌ Error fetching profiles:', res.error);
+          if (!isRefresh) setLoading(false);
+          return;
+        }
+        data = res.data;
+        hasMore = res.hasMore;
       }
 
       if (data && data.length > 0) {
         // Filter out profiles with no photos or bio
         let validProfiles = data.filter(
-          (profile: any) => 
-            profile.photos && 
-            profile.photos.length > 0 && 
-            profile.bio && 
+          (profile: any) =>
+            profile.photos &&
+            profile.photos.length > 0 &&
+            profile.bio &&
             profile.bio.trim().length > 0
         );
 
-        // Filter by gender preference (dating app logic) - Always apply this
+        // Filter by gender preference (dating app logic)
         if (currentUserInterest) {
           validProfiles = validProfiles.filter((profile: any) => {
-            // If user is interested in "Women", only show Female profiles
-            if (currentUserInterest === 'Women') {
-              return profile.gender === 'Female';
-            }
-            // If user is interested in "Men", only show Male profiles
-            if (currentUserInterest === 'Men') {
-              return profile.gender === 'Male';
-            }
-            // Default: don't show profiles if preference not recognized
+            if (currentUserInterest === 'Women') return profile.gender === 'Female';
+            if (currentUserInterest === 'Men') return profile.gender === 'Male';
             return false;
           });
-          // console.log(`🎯 Filtered by interest "${currentUserInterest}": ${validProfiles.length} profiles`);
         }
-        
-        // Smart Algorithm: Sort profiles by compatibility and activity (Tinder-style)
+
+        // Sort: online first, then active, then last_active, then created_at
         const profiles = (validProfiles as UserProfile[]).sort((a, b) => {
           const aActive = a.last_active ? new Date(a.last_active).getTime() : 0;
           const bActive = b.last_active ? new Date(b.last_active).getTime() : 0;
           const now = Date.now();
-          const oneMinute = 1 * 60 * 1000; // 1 minute for online status
-          const oneDay = 24 * 60 * 60 * 1000; // 24 hours for active status
-          
+          const oneMinute = 1 * 60 * 1000;
+          const oneDay = 24 * 60 * 60 * 1000;
           const aIsOnline = aActive > (now - oneMinute);
           const bIsOnline = bActive > (now - oneMinute);
           const aIsActive = aActive > (now - oneDay);
           const bIsActive = bActive > (now - oneDay);
-          
-          // Priority 1: Online users first (HIGHEST PRIORITY)
           if (aIsOnline && !bIsOnline) return -1;
           if (!aIsOnline && bIsOnline) return 1;
-          
-          // Priority 2: Active users (within 24 hours)
           if (aIsActive && !bIsActive) return -1;
           if (!aIsActive && bIsActive) return 1;
-          
-          // Priority 3: Most recently active (within same category)
           if (aActive !== bActive) return bActive - aActive;
-          
-          // Priority 4: Newest profiles (recently joined)
           return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
         });
-        
-        // Store all unfiltered profiles
-        setAllProfiles(profiles);
-        
-        // Apply filters only if filters are applied
+
+        const uniq = dedupById(profiles);
         if (filtersApplied) {
-          applyFilters(profiles);
+          setAllProfiles(uniq);
+          applyFilters(uniq);
+          setHasMoreProfiles(false);
         } else {
-          setUserProfiles(profiles);
+          setUserProfiles(uniq);
+          setAllProfiles([]);
+          setHasMoreProfiles(uniq.length === 0 ? false : hasMore);
         }
       } else {
-        // console.log('⚠️  No user profiles found');
         setUserProfiles([]);
+        setHasMoreProfiles(false);
       }
       
       if (!isRefresh) {
@@ -368,6 +383,40 @@ export default function HomeScreen() {
       }
     }
   };
+
+  const loadMoreProfiles = useCallback(async () => {
+    if (loadingMore || !hasMoreProfiles || filtersApplied || userProfiles.length === 0) return;
+    setLoadingMore(true);
+    try {
+      const res = await getUserProfilesPaginated(currentUserId || undefined, {
+        limit: 15,
+        offset: userProfiles.length,
+      });
+      if (res.error || !res.data) {
+        setHasMoreProfiles(false);
+        return;
+      }
+      const interest = currentUserInterestRef.current;
+      let valid = res.data.filter(
+        (p: any) => p.photos?.length > 0 && p.bio?.trim?.()?.length > 0
+      );
+      if (interest) {
+        valid = valid.filter((p: any) => {
+          if (interest === 'Women') return p.gender === 'Female';
+          if (interest === 'Men') return p.gender === 'Male';
+          return false;
+        });
+      }
+      setUserProfiles((prev) => {
+        const have = new Set(prev.map((p) => p.id));
+        const toAdd = (valid as UserProfile[]).filter((v) => !have.has(v.id));
+        return toAdd.length ? [...prev, ...toAdd] : prev;
+      });
+      setHasMoreProfiles(res.hasMore);
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [loadingMore, hasMoreProfiles, filtersApplied, userProfiles.length, currentUserId]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -446,7 +495,98 @@ export default function HomeScreen() {
           </Text>
         </View>
       ) : (
-        <ScrollView
+        <FlatList
+          data={userProfiles}
+          keyExtractor={(item) => item.id}
+          renderItem={({ item: profile, index }) => {
+            const fullName = profile.first_name;
+            const username = profile.first_name.toLowerCase();
+            const mainPhoto = profile.photos?.length > 0 ? profile.photos[0] : undefined;
+            return (
+              <PostCard
+                profileName={fullName}
+                location={profile.location}
+                username={username}
+                timeAgo={getTimeAgo(profile.created_at)}
+                lastActive={profile.last_active}
+                profileImage={mainPhoto}
+                photos={profile.photos}
+                bio_title={profile.bio_title}
+                bio={profile.bio}
+                postText={profile.bio}
+                nationality={profile.nationality}
+                userId={profile.id}
+                commentCount={0}
+                index={index}
+                onShare={handleShare}
+                onComment={handleComment}
+                onLike={(userId, idx) => {
+                  setUserProfiles((prev) => prev.filter((p) => p.id !== userId));
+                  const matchName = profile.first_name;
+                  const matchPhoto = profile.photos?.[0];
+                  const pro = profile;
+                  const restoreIdx = typeof idx === 'number' ? idx : 0;
+                  (async () => {
+                    const [canLike, limitCheck] = await Promise.all([canLikeUser(), checkMatchLimit()]);
+                    if (!canLike.canLike) {
+                      setUserProfiles((prev) => {
+                        if (prev.some((p) => p.id === pro.id)) return prev;
+                        const c = [...prev];
+                        c.splice(Math.min(restoreIdx, c.length), 0, pro);
+                        return c;
+                      });
+                      setLikeLimitInfo({ remaining: canLike.remaining, limit: canLike.limit });
+                      setShowLikeLimitModal(true);
+                      return;
+                    }
+                    if (limitCheck.reached) {
+                      setUserProfiles((prev) => {
+                        if (prev.some((p) => p.id === pro.id)) return prev;
+                        const c = [...prev];
+                        c.splice(Math.min(restoreIdx, c.length), 0, pro);
+                        return c;
+                      });
+                      setMatchLimitInfo({ waitingCount: limitCheck.waitingCount, limit: limitCheck.limit });
+                      setShowLimitModal(true);
+                      return;
+                    }
+                    const likeResult = await likeUser(userId);
+                    if (likeResult.error) return;
+                    updateLikeCount();
+                    recordProfileView(userId).catch(() => {});
+                    const { data: { session } } = await supabase.auth.getSession();
+                    if (session?.user) {
+                      const m = await checkForMatch(session.user.id, userId);
+                      if (m?.data) {
+                        setShowMatchPopup(true);
+                        setMatchedUserName(matchName);
+                        setMatchedUserPhoto(matchPhoto);
+                      }
+                    }
+                  })();
+                }}
+                onPass={(userId) => setUserProfiles((prev) => prev.filter((p) => p.id !== userId))}
+                onBlock={(userId) => setUserProfiles((prev) => prev.filter((p) => p.id !== userId))}
+              />
+            );
+          }}
+          ItemSeparatorComponent={() => <View style={styles.divider} />}
+          ListFooterComponent={
+            loadingMore && userProfiles.length > 0 ? (
+              <View style={styles.footerLoader}>
+                <ActivityIndicator size="small" color={Colors.primary} />
+              </View>
+            ) : null
+          }
+          onEndReached={() => {
+            if (userProfiles.length > 0 && hasMoreProfiles && !loadingMore && !filtersApplied) {
+              loadMoreProfiles();
+            }
+          }}
+          onEndReachedThreshold={0.3}
+          initialNumToRender={10}
+          maxToRenderPerBatch={10}
+          windowSize={5}
           style={styles.scrollView}
           contentContainerStyle={styles.contentContainer}
           showsVerticalScrollIndicator={false}
@@ -459,101 +599,7 @@ export default function HomeScreen() {
               progressBackgroundColor={Colors.background}
             />
           }
-        >
-          {userProfiles.map((profile, index) => {
-            const fullName = profile.first_name;
-            const username = profile.first_name.toLowerCase();
-            const mainPhoto = profile.photos && profile.photos.length > 0 ? profile.photos[0] : undefined;
-            
-            return (
-              <React.Fragment key={profile.id}>
-                {index > 0 && <View style={styles.divider} />}
-                <PostCard
-                  profileName={fullName}
-                  location={profile.location}
-                  username={username}
-                  timeAgo={getTimeAgo(profile.created_at)}
-                  lastActive={profile.last_active}
-                  profileImage={mainPhoto}
-                  photos={profile.photos} // Pass all photos for swiper
-                  bio_title={profile.bio_title}
-                  bio={profile.bio}
-                  postText={profile.bio} // Legacy support
-                  nationality={profile.nationality} // Pass nationality
-                  userId={profile.id} // Pass userId for profile navigation
-                  commentCount={0}
-                  onShare={handleShare}
-                  onComment={handleComment}
-                  onLike={async (userId) => {
-                    // Check daily like limit first
-                    const canLike = await canLikeUser();
-                    if (!canLike.canLike) {
-                      // Show daily like limit modal (upgrade popup)
-                      setLikeLimitInfo({
-                        remaining: canLike.remaining,
-                        limit: canLike.limit,
-                      });
-                      setShowLikeLimitModal(true);
-                      return; // Don't remove from list, don't like
-                    }
-                    
-                    // Check match limit before allowing like
-                    const { checkMatchLimit, likeUser } = await import('@/lib/supabase');
-                    const limitCheck = await checkMatchLimit();
-                    
-                    if (limitCheck.reached) {
-                      // Show blocking modal
-                      setMatchLimitInfo({
-                        waitingCount: limitCheck.waitingCount,
-                        limit: limitCheck.limit,
-                      });
-                      setShowLimitModal(true);
-                      return; // Don't remove from list, don't like
-                    }
-                    
-                    // Perform the like operation
-                    const likeResult = await likeUser(userId);
-                    
-                    // If there's an error, show appropriate modal
-                    if (likeResult.error) {
-                      if (likeResult.error.message === 'DAILY_LIKE_LIMIT_REACHED') {
-                        setLikeLimitInfo({
-                          remaining: likeResult.error.remaining || 0,
-                          limit: likeResult.error.limit || 1,
-                        });
-                        setShowLikeLimitModal(true);
-                        return;
-                      }
-                      if (likeResult.error.message === 'MATCH_LIMIT_REACHED') {
-                        setMatchLimitInfo({
-                          waitingCount: limitCheck.waitingCount,
-                          limit: limitCheck.limit,
-                        });
-                        setShowLimitModal(true);
-                        return;
-                      }
-                      return; // Don't remove card on error
-                    }
-                    
-                    // Update like count after successful like
-                    updateLikeCount();
-                    
-                    // Remove liked user from the list
-                    setUserProfiles(prev => prev.filter(p => p.id !== userId));
-                  }}
-                  onPass={(userId) => {
-                    // Remove passed user from the list
-                    setUserProfiles(prev => prev.filter(p => p.id !== userId));
-                  }}
-                  onBlock={(userId) => {
-                    // Remove blocked user from the list
-                    setUserProfiles(prev => prev.filter(p => p.id !== userId));
-                  }}
-                />
-              </React.Fragment>
-            );
-          })}
-        </ScrollView>
+        />
       )}
 
       {/* Filter Modal */}
@@ -808,10 +854,44 @@ export default function HomeScreen() {
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.applyButton}
-                onPress={() => {
-                  setFiltersApplied(true);
-                  applyFilters(allProfiles.length > 0 ? allProfiles : userProfiles);
+                onPress={async () => {
                   setShowFilterModal(false);
+                  if (allProfiles.length === 0) {
+                    setRefreshing(true);
+                    const { user } = await getCurrentUser();
+                    let interest: string | null = null;
+                    if (user) {
+                      const { data: prof } = await getUserProfile(user.id);
+                      interest = prof?.interested_in || null;
+                    }
+                    const { data, error } = await getAllUserProfiles(user?.id);
+                    setRefreshing(false);
+                    if (error || !data?.length) return;
+                    let valid = data.filter((p: any) => p.photos?.length > 0 && p.bio?.trim?.()?.length > 0);
+                    if (interest) {
+                      valid = valid.filter((p: any) =>
+                        (interest === 'Women' && p.gender === 'Female') || (interest === 'Men' && p.gender === 'Male')
+                      );
+                    }
+                    const profiles = (valid as UserProfile[]).sort((a, b) => {
+                      const aA = a.last_active ? new Date(a.last_active).getTime() : 0;
+                      const bA = b.last_active ? new Date(b.last_active).getTime() : 0;
+                      const now = Date.now();
+                      const aOn = aA > (now - 60000), bOn = bA > (now - 60000);
+                      const aAc = aA > (now - 86400000), bAc = bA > (now - 86400000);
+                      if (aOn && !bOn) return -1; if (!aOn && bOn) return 1;
+                      if (aAc && !bAc) return -1; if (!aAc && bAc) return 1;
+                      if (aA !== bA) return bA - aA;
+                      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+                    });
+                    const u = dedupById(profiles);
+                    setAllProfiles(u);
+                    applyFilters(u);
+                    setHasMoreProfiles(false);
+                  } else {
+                    applyFilters(allProfiles);
+                  }
+                  setFiltersApplied(true);
                 }}
               >
                 <Text style={styles.applyButtonText}>Apply Filters</Text>
@@ -944,6 +1024,14 @@ export default function HomeScreen() {
           </View>
         </View>
       </Modal>
+
+      <MatchPopup
+        visible={showMatchPopup}
+        matchedUserName={matchedUserName}
+        matchedUserPhoto={matchedUserPhoto}
+        onClose={() => setShowMatchPopup(false)}
+        onViewMatch={() => setShowMatchPopup(false)}
+      />
     </View>
   );
 }
@@ -959,6 +1047,11 @@ const styles = StyleSheet.create({
   contentContainer: {
     padding: 16,
     paddingTop: 16,
+  },
+  footerLoader: {
+    paddingVertical: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   loadingContainer: {
     flex: 1,

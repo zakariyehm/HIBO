@@ -27,12 +27,13 @@ interface PostCardProps {
   userId?: string; // User ID for profile navigation
   onShare?: () => void;
   onComment?: () => void;
-  onLike?: (userId: string) => Promise<void> | void; // Callback when user is liked
-  onPass?: (userId: string) => void; // Callback when user is passed
-  onBlock?: (userId: string) => void; // Callback when user is blocked
+  onLike?: (userId: string, index?: number) => Promise<void> | void;
+  onPass?: (userId: string) => void;
+  onBlock?: (userId: string) => void;
+  index?: number; // meeshii saxda ah (rollback haddii limit)
 }
 
-export function PostCard({
+function PostCardBase({
   title,
   profileName,
   location,
@@ -54,6 +55,7 @@ export function PostCard({
   onLike,
   onPass,
   onBlock,
+  index,
 }: PostCardProps) {
   const { text: statusText, isOnline } = getUserStatus(lastActive);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
@@ -85,17 +87,11 @@ export function PostCard({
 
   const handleLike = async () => {
     if (!userId || isProcessing) return;
-    
-    // Set processing state briefly to prevent double-tap
     setIsProcessing(true);
-    setTimeout(() => setIsProcessing(false), 100);
+    setTimeout(() => setIsProcessing(false), 400);
 
-    // IMPORTANT: Let parent component handle like limit check and show modal
-    // Call parent's onLike callback which will check limits and show upgrade popup
     if (onLike) {
-      await onLike(userId);
-      // If parent didn't remove the card (limit reached), don't proceed
-      // Parent will show the upgrade modal
+      onLike(userId, index);
       return;
     }
 
@@ -149,8 +145,6 @@ export function PostCard({
   const handlePass = async () => {
     if (!userId || isProcessing) return;
     setIsProcessing(true);
-
-    // OPTIMISTIC UPDATE - Remove card immediately (like Tinder - instant!)
     if (onPass) {
       onPass(userId);
     }
@@ -332,8 +326,8 @@ export function PostCard({
           </View>
         )}
 
-        {/* Action Buttons - Like & Pass */}
-        <View style={styles.actionButtons}>
+        {/* Action Buttons - Like & Pass (pointerEvents: xaydiid double-tap) */}
+        <View style={styles.actionButtons} pointerEvents={isProcessing ? 'none' : 'auto'}>
           <TouchableOpacity 
             style={[styles.actionButton, styles.likeButton, isProcessing && styles.actionButtonDisabled]}
             onPress={handleLike}
@@ -388,26 +382,20 @@ export function PostCard({
         matchedUserName={profileName}
         matchedUserPhoto={imageArray.length > 0 ? imageArray[0] : undefined}
         onClose={() => {
-          // console.log('🚪 Closing match popup - removing card');
           setShowMatchPopup(false);
-          // Remove card after popup closes
-          if (onLike && userId) {
-            onLike(userId);
-          }
+          if (onLike && userId) onLike(userId, index);
         }}
         onViewMatch={() => {
-          // console.log('👀 View match pressed - removing card');
           setShowMatchPopup(false);
-          // Remove card after navigating
-          if (onLike && userId) {
-            onLike(userId);
-          }
+          if (onLike && userId) onLike(userId, index);
           router.push('/(tabs)/match');
         }}
       />
     </View>
   );
 }
+
+export const PostCard = React.memo(PostCardBase);
 
 const styles = StyleSheet.create({
   container: {

@@ -1,3 +1,4 @@
+import { initIAP } from '@/lib/iap';
 import { DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -14,11 +15,10 @@ export const unstable_settings = {
 
 export default function RootLayout() {
   useEffect(() => {
-    // Hide splash screen after app is ready
     const prepare = async () => {
       try {
-        // Small delay to ensure smooth transition
         await new Promise(resolve => setTimeout(resolve, 500));
+        await initIAP();
       } catch (e) {
         console.warn(e);
       } finally {

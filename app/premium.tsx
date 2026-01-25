@@ -1,8 +1,9 @@
 import { Colors } from '@/constants/theme';
+import { getProductIdForPlan, purchaseSubscription, setOnPurchaseError, setOnPurchaseSuccess } from '@/lib/iap';
 import { createSubscription, type PaymentMethod } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -203,7 +204,7 @@ const PaymentView = ({
       <View style={styles.paymentForm}>
         <Text style={styles.inputLabel}>Choose payment method</Text>
 
-        {/* Hormuud */}
+        {/* Hormuud – always */}
         <TouchableOpacity
           style={[styles.paymentOption, paymentMethod === 'hormuud' && styles.paymentOptionSelected]}
           onPress={() => onPaymentMethodChange('hormuud')}
@@ -217,43 +218,37 @@ const PaymentView = ({
           {paymentMethod === 'hormuud' && <Ionicons name="checkmark-circle" size={24} color={Colors.textDark} />}
         </TouchableOpacity>
 
-        {/* Apple Pay – iOS only */}
-        <TouchableOpacity
-          style={[
-            styles.paymentOption,
-            paymentMethod === 'apple_pay' && styles.paymentOptionSelected,
-            !isApplePayAvailable && styles.paymentOptionDisabled,
-          ]}
-          onPress={() => isApplePayAvailable && onPaymentMethodChange('apple_pay')}
-          activeOpacity={0.8}
-          disabled={!isApplePayAvailable}
-        >
-          <Ionicons name="logo-apple" size={24} color={paymentMethod === 'apple_pay' ? Colors.textDark : Colors.textLight} />
-          <View style={styles.paymentOptionText}>
-            <Text style={[styles.paymentOptionTitle, paymentMethod === 'apple_pay' && styles.paymentOptionTitleSelected]}>Apple Pay</Text>
-            <Text style={styles.paymentOptionSub}>{isApplePayAvailable ? 'Pay with Face ID / Touch ID' : 'iOS only'}</Text>
-          </View>
-          {paymentMethod === 'apple_pay' && <Ionicons name="checkmark-circle" size={24} color={Colors.textDark} />}
-        </TouchableOpacity>
+        {/* Apple Pay – iOS only (hidden on Android) */}
+        {isApplePayAvailable && (
+          <TouchableOpacity
+            style={[styles.paymentOption, paymentMethod === 'apple_pay' && styles.paymentOptionSelected]}
+            onPress={() => onPaymentMethodChange('apple_pay')}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="logo-apple" size={24} color={paymentMethod === 'apple_pay' ? Colors.textDark : Colors.textLight} />
+            <View style={styles.paymentOptionText}>
+              <Text style={[styles.paymentOptionTitle, paymentMethod === 'apple_pay' && styles.paymentOptionTitleSelected]}>Apple Pay</Text>
+              <Text style={styles.paymentOptionSub}>Pay with Face ID / Touch ID</Text>
+            </View>
+            {paymentMethod === 'apple_pay' && <Ionicons name="checkmark-circle" size={24} color={Colors.textDark} />}
+          </TouchableOpacity>
+        )}
 
-        {/* Google Pay – Android only */}
-        <TouchableOpacity
-          style={[
-            styles.paymentOption,
-            paymentMethod === 'google_pay' && styles.paymentOptionSelected,
-            !isGooglePayAvailable && styles.paymentOptionDisabled,
-          ]}
-          onPress={() => isGooglePayAvailable && onPaymentMethodChange('google_pay')}
-          activeOpacity={0.8}
-          disabled={!isGooglePayAvailable}
-        >
-          <Ionicons name="logo-google" size={24} color={paymentMethod === 'google_pay' ? Colors.textDark : Colors.textLight} />
-          <View style={styles.paymentOptionText}>
-            <Text style={[styles.paymentOptionTitle, paymentMethod === 'google_pay' && styles.paymentOptionTitleSelected]}>Google Pay</Text>
-            <Text style={styles.paymentOptionSub}>{isGooglePayAvailable ? 'Pay with Google' : 'Android only'}</Text>
-          </View>
-          {paymentMethod === 'google_pay' && <Ionicons name="checkmark-circle" size={24} color={Colors.textDark} />}
-        </TouchableOpacity>
+        {/* Google Pay – Android only (hidden on iOS) */}
+        {isGooglePayAvailable && (
+          <TouchableOpacity
+            style={[styles.paymentOption, paymentMethod === 'google_pay' && styles.paymentOptionSelected]}
+            onPress={() => onPaymentMethodChange('google_pay')}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="logo-google" size={24} color={paymentMethod === 'google_pay' ? Colors.textDark : Colors.textLight} />
+            <View style={styles.paymentOptionText}>
+              <Text style={[styles.paymentOptionTitle, paymentMethod === 'google_pay' && styles.paymentOptionTitleSelected]}>Google Pay</Text>
+              <Text style={styles.paymentOptionSub}>Pay with Google</Text>
+            </View>
+            {paymentMethod === 'google_pay' && <Ionicons name="checkmark-circle" size={24} color={Colors.textDark} />}
+          </TouchableOpacity>
+        )}
 
         {/* Phone input – only for Hormuud */}
         {paymentMethod === 'hormuud' && (
@@ -317,6 +312,12 @@ export default function PremiumScreen() {
     setIsTransitioning(true);
     await new Promise((resolve) => setTimeout(resolve, 600));
     setIsTransitioning(false);
+    // Reset payment method if it doesn't apply on this platform (e.g. google_pay on iOS)
+    setPaymentMethod((prev) => {
+      if (Platform.OS === 'android' && prev === 'apple_pay') return 'hormuud';
+      if (Platform.OS === 'ios' && prev === 'google_pay') return 'hormuud';
+      return prev;
+    });
     setCurrentScreen('payment');
   };
 
@@ -342,12 +343,61 @@ export default function PremiumScreen() {
     }
   };
 
+  useEffect(() => {
+    return () => {
+      setOnPurchaseSuccess(null);
+      setOnPurchaseError(null);
+    };
+  }, []);
+
   const handleSubscribe = async () => {
     if (paymentMethod === 'hormuud' && phoneNumber.length < 10) {
       Alert.alert('Error', 'Please enter a valid phone number (e.g., 25261xxxxxxx).');
       return;
     }
 
+    // Apple Pay / Google Pay: real in-app purchase
+    if (paymentMethod === 'apple_pay' || paymentMethod === 'google_pay') {
+      setIsSubscribing(true);
+      setOnPurchaseSuccess((plan) => {
+        setOnPurchaseSuccess(null);
+        setOnPurchaseError(null);
+        setIsSubscribing(false);
+        Alert.alert(
+          'Success!',
+          `You have subscribed to the ${plan} plan! Enjoy all premium features.`,
+          [{ text: 'OK', onPress: () => router.back() }]
+        );
+      });
+      setOnPurchaseError((err) => {
+        setOnPurchaseSuccess(null);
+        setOnPurchaseError(null);
+        setIsSubscribing(false);
+        const isCancel = err?.code === 'E_USER_CANCELLED' || /cancel/i.test(String(err?.message ?? ''));
+        if (!isCancel) {
+          Alert.alert('Payment error', err?.message || 'Purchase failed. Please try again.');
+        }
+      });
+
+      const result = await purchaseSubscription(getProductIdForPlan(selectedPlan));
+
+      if (result.error === 'Cancelled') {
+        setOnPurchaseSuccess(null);
+        setOnPurchaseError(null);
+        setIsSubscribing(false);
+        return;
+      }
+      if (result.error) {
+        setOnPurchaseSuccess(null);
+        setOnPurchaseError(null);
+        setIsSubscribing(false);
+        Alert.alert('Error', result.error);
+        return;
+      }
+      return;
+    }
+
+    // Hormuud: create subscription with phone
     setIsSubscribing(true);
     try {
       const { data, error } = await createSubscription({
