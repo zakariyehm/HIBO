@@ -1,22 +1,30 @@
 import { Colors } from '@/constants/theme';
-import { LikesSkeleton } from '@/components/SkeletonLoader';
 import { Header } from '@/components/header';
-import { getReceivedLikes, isPremiumUser, likeUser, passUser, supabase } from '@/lib/supabase';
+import { getReceivedLikes, isPremiumUser, likeUser, passUser } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  FlatList,
   Modal,
   RefreshControl,
-  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
+
+function dedupById<T extends { id: string }>(arr: T[]): T[] {
+  const seen = new Set<string>();
+  return arr.filter((p) => {
+    if (seen.has(p.id)) return false;
+    seen.add(p.id);
+    return true;
+  });
+}
 
 interface ReceivedLike {
   id: string;
@@ -31,34 +39,31 @@ interface ReceivedLike {
 export default function LikesScreen() {
   const [receivedLikes, setReceivedLikes] = useState<ReceivedLike[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [isPremium, setIsPremium] = useState(false);
   const [showPremiumModal, setShowPremiumModal] = useState(false);
   const [processing, setProcessing] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchReceivedLikes();
+    fetchReceivedLikes(false);
     checkPremiumStatus();
   }, []);
 
-  const fetchReceivedLikes = async () => {
+  const fetchReceivedLikes = async (isRefresh = false) => {
     try {
-      setLoading(true);
+      if (isRefresh) setRefreshing(true);
+      else setLoading(true);
       const { data, error } = await getReceivedLikes();
-
       if (error) {
         console.error('❌ Error fetching received likes:', error);
-        setLoading(false);
         return;
       }
-
-      if (data) {
-        setReceivedLikes(data as ReceivedLike[]);
-      }
-
-      setLoading(false);
-    } catch (error) {
-      console.error('❌ Exception in fetchReceivedLikes:', error);
-      setLoading(false);
+      if (data) setReceivedLikes(dedupById(data as ReceivedLike[]));
+    } catch (e) {
+      console.error('❌ Exception in fetchReceivedLikes:', e);
+    } finally {
+      if (isRefresh) setRefreshing(false);
+      else setLoading(false);
     }
   };
 
@@ -67,50 +72,41 @@ export default function LikesScreen() {
     setIsPremium(premium);
   };
 
-  const handleLike = async (userId: string) => {
+  const handleLike = (userId: string) => {
     if (processing) return;
-    
     setProcessing(userId);
-    try {
-      const { data, error } = await likeUser(userId);
-      
-      if (error) {
-        Alert.alert('Error', 'Failed to like user');
+    const like = receivedLikes.find((l) => l.id === userId);
+    setReceivedLikes((prev) => prev.filter((l) => l.id !== userId));
+    (async () => {
+      try {
+        const { data, error } = await likeUser(userId);
+        if (error) {
+          if (like) setReceivedLikes((prev) => (prev.some((l) => l.id === like.id) ? prev : [...prev, like]));
+          Alert.alert('Error', 'Failed to like user');
+          return;
+        }
+        if (data?.match) router.push({ pathname: '/(tabs)/match' });
+      } catch (e) {
+        console.error('❌ Error liking user:', e);
+      } finally {
         setProcessing(null);
-        return;
       }
-
-      // Remove from list
-      setReceivedLikes(prev => prev.filter(like => like.id !== userId));
-      
-      // Check if match occurred
-      if (data?.match) {
-        // Navigate to match screen or show match popup
-        router.push({
-          pathname: '/match',
-        });
-      }
-      
-      setProcessing(null);
-    } catch (error) {
-      console.error('❌ Error liking user:', error);
-      setProcessing(null);
-    }
+    })();
   };
 
-  const handlePass = async (userId: string) => {
+  const handlePass = (userId: string) => {
     if (processing) return;
-    
     setProcessing(userId);
-    try {
-      await passUser(userId);
-      // Remove from list
-      setReceivedLikes(prev => prev.filter(like => like.id !== userId));
-      setProcessing(null);
-    } catch (error) {
-      console.error('❌ Error passing user:', error);
-      setProcessing(null);
-    }
+    setReceivedLikes((prev) => prev.filter((like) => like.id !== userId));
+    (async () => {
+      try {
+        await passUser(userId);
+      } catch (e) {
+        console.error('❌ Error passing user:', e);
+      } finally {
+        setProcessing(null);
+      }
+    })();
   };
 
   const handleViewProfile = (userId: string) => {
@@ -156,76 +152,63 @@ export default function LikesScreen() {
           </Text>
         </View>
       ) : (
-        <ScrollView
+        <FlatList
+          data={receivedLikes}
+          keyExtractor={(item) => item.id}
+          renderItem={({ item: like }) => {
+            const mainPhoto = like.photos?.length ? like.photos[0] : null;
+            const statusMessage = isPremium ? `Liked you ${getTimeAgo(like.liked_at)}` : 'Liked you • Premium to see';
+            return (
+              <TouchableOpacity
+                style={styles.likeItem}
+                onPress={() => handleViewProfile(like.id)}
+                activeOpacity={0.7}
+                disabled={processing === like.id}
+              >
+                <View style={styles.photoContainer}>
+                  {mainPhoto ? (
+                    <>
+                      <ExpoImage source={{ uri: mainPhoto }} style={styles.photo} contentFit="cover" />
+                      {!isPremium && (
+                        <View style={styles.blurOverlay}>
+                          <View style={styles.blurBackground} />
+                          <View style={styles.premiumLock}>
+                            <Ionicons name="lock-closed" size={16} color="#FFFFFF" />
+                          </View>
+                        </View>
+                      )}
+                    </>
+                  ) : (
+                    <View style={styles.photoPlaceholder}>
+                      <Ionicons name="person" size={32} color={Colors.textLight} />
+                    </View>
+                  )}
+                </View>
+                <View style={styles.likeInfo}>
+                  <Text style={styles.likeName} numberOfLines={1}>{like.first_name}</Text>
+                  <Text style={styles.statusMessage} numberOfLines={1}>{statusMessage}</Text>
+                </View>
+                {!isPremium && (
+                  <View style={styles.premiumIcon}>
+                    <Ionicons name="lock-closed" size={20} color={Colors.textLight} />
+                  </View>
+                )}
+              </TouchableOpacity>
+            );
+          }}
+          ItemSeparatorComponent={() => <View style={styles.divider} />}
           style={styles.scrollView}
           contentContainerStyle={styles.contentContainer}
           showsVerticalScrollIndicator={false}
           refreshControl={
             <RefreshControl
-              refreshing={false}
-              onRefresh={fetchReceivedLikes}
+              refreshing={refreshing}
+              onRefresh={() => fetchReceivedLikes(true)}
               tintColor={Colors.primary}
               colors={[Colors.primary]}
             />
           }
-        >
-          {receivedLikes.map((like, index) => {
-            const mainPhoto = like.photos && like.photos.length > 0 ? like.photos[0] : null;
-            const firstName = like.first_name;
-            const statusMessage = isPremium 
-              ? `Liked you ${getTimeAgo(like.liked_at)}`
-              : 'Liked you • Premium to see';
-            
-            return (
-              <React.Fragment key={like.id}>
-                {index > 0 && <View style={styles.divider} />}
-                <TouchableOpacity
-                  style={styles.likeItem}
-                  onPress={() => handleViewProfile(like.id)}
-                  activeOpacity={0.7}
-                  disabled={processing === like.id}
-                >
-                  <View style={styles.photoContainer}>
-                    {mainPhoto ? (
-                      <>
-                        <ExpoImage
-                          source={{ uri: mainPhoto }}
-                          style={styles.photo}
-                          contentFit="cover"
-                        />
-                        {!isPremium && (
-                          <View style={styles.blurOverlay}>
-                            <View style={styles.blurBackground} />
-                            <View style={styles.premiumLock}>
-                              <Ionicons name="lock-closed" size={16} color="#FFFFFF" />
-                            </View>
-                          </View>
-                        )}
-                      </>
-                    ) : (
-                      <View style={styles.photoPlaceholder}>
-                        <Ionicons name="person" size={32} color={Colors.textLight} />
-                      </View>
-                    )}
-                  </View>
-                  <View style={styles.likeInfo}>
-                    <Text style={styles.likeName} numberOfLines={1}>
-                      {firstName}
-                    </Text>
-                    <Text style={styles.statusMessage} numberOfLines={1}>
-                      {statusMessage}
-                    </Text>
-                  </View>
-                  {!isPremium && (
-                    <View style={styles.premiumIcon}>
-                      <Ionicons name="lock-closed" size={20} color={Colors.textLight} />
-                    </View>
-                  )}
-                </TouchableOpacity>
-              </React.Fragment>
-            );
-          })}
-        </ScrollView>
+        />
       )}
 
       {/* Premium Upgrade Modal */}

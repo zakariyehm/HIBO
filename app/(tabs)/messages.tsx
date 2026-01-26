@@ -7,10 +7,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
+  FlatList,
   Image,
   RefreshControl,
-  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -18,25 +17,20 @@ import {
 } from 'react-native';
 
 interface Conversation {
-  match: {
-    id: string;
-    user1_id: string;
-    user2_id: string;
-    created_at: string;
-  };
-  partner: {
-    id: string;
-    first_name: string;
-    last_name: string;
-    photos: string[];
-  } | null;
-  lastMessage: {
-    id: string;
-    content: string;
-    created_at: string;
-    sender_id: string;
-  } | null;
+  match: { id: string; user1_id: string; user2_id: string; created_at: string };
+  partner: { id: string; first_name: string; last_name: string; photos: string[] } | null;
+  lastMessage: { id: string; content: string; created_at: string; sender_id: string } | null;
   unreadCount: number;
+}
+
+function dedupByMatchId(arr: Conversation[]): Conversation[] {
+  const seen = new Set<string>();
+  return arr.filter((c) => {
+    const k = c.match.id;
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
 }
 
 export default function MessagesScreen() {
@@ -137,10 +131,8 @@ export default function MessagesScreen() {
       }
 
       if (data) {
-        setConversations(data);
-        if (isInitialLoad) {
-          setIsInitialLoad(false);
-        }
+        setConversations(dedupByMatchId(data));
+        if (isInitialLoad) setIsInitialLoad(false);
       }
 
       if (showLoading) {
@@ -201,43 +193,26 @@ export default function MessagesScreen() {
           </Text>
         </View>
       ) : (
-        <ScrollView
-          style={styles.scrollView}
-          contentContainerStyle={styles.contentContainer}
-          showsVerticalScrollIndicator={false}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={Colors.primary} />
-          }
-        >
-          {conversations.map((conversation) => {
+        <FlatList
+          data={conversations.filter((c) => c.partner)}
+          keyExtractor={(item) => item.match.id}
+          renderItem={({ item: conversation }) => {
             if (!conversation.partner) return null;
-
             const partnerName = `${conversation.partner.first_name} ${conversation.partner.last_name}`;
             const partnerPhoto = conversation.partner.photos?.[0];
-            
-            // Decrypt last message content if it exists
             let lastMessageText = 'No messages yet';
             if (conversation.lastMessage?.content) {
               try {
-                const encryptionKey = deriveMatchKey(
-                  conversation.match.id,
-                  conversation.match.user1_id,
-                  conversation.match.user2_id
-                );
-                lastMessageText = decryptMessage(conversation.lastMessage.content, encryptionKey);
-              } catch (error) {
-                console.error('❌ Error decrypting last message:', error);
+                const key = deriveMatchKey(conversation.match.id, conversation.match.user1_id, conversation.match.user2_id);
+                lastMessageText = decryptMessage(conversation.lastMessage.content, key);
+              } catch {
                 lastMessageText = conversation.lastMessage.content;
               }
             }
-            
-            const lastMessageTime = conversation.lastMessage
-              ? formatTime(conversation.lastMessage.created_at)
-              : '';
+            const lastMessageTime = conversation.lastMessage ? formatTime(conversation.lastMessage.created_at) : '';
 
             return (
               <TouchableOpacity
-                key={conversation.match.id}
                 style={styles.conversationItem}
                 onPress={() => handleConversationPress(conversation)}
                 activeOpacity={0.7}
@@ -260,18 +235,11 @@ export default function MessagesScreen() {
                 </View>
                 <View style={styles.conversationInfo}>
                   <View style={styles.conversationHeader}>
-                    <Text style={styles.conversationName} numberOfLines={1}>
-                      {partnerName}
-                    </Text>
-                    {lastMessageTime && (
-                      <Text style={styles.conversationTime}>{lastMessageTime}</Text>
-                    )}
+                    <Text style={styles.conversationName} numberOfLines={1}>{partnerName}</Text>
+                    {lastMessageTime && <Text style={styles.conversationTime}>{lastMessageTime}</Text>}
                   </View>
                   <Text
-                    style={[
-                      styles.conversationPreview,
-                      conversation.unreadCount > 0 && styles.conversationPreviewUnread,
-                    ]}
+                    style={[styles.conversationPreview, conversation.unreadCount > 0 && styles.conversationPreviewUnread]}
                     numberOfLines={1}
                   >
                     {lastMessageText}
@@ -279,8 +247,12 @@ export default function MessagesScreen() {
                 </View>
               </TouchableOpacity>
             );
-          })}
-        </ScrollView>
+          }}
+          style={styles.scrollView}
+          contentContainerStyle={styles.contentContainer}
+          showsVerticalScrollIndicator={false}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={Colors.primary} />}
+        />
       )}
     </View>
   );

@@ -23,6 +23,10 @@ export const Colors = {
   primaryText: '#FFFFFF',
   green: '#4CAF50',
   red: '#F44336',
+  /** Like / love – pink (dating app) */
+  love: '#E91E63',
+  /** Pass / skip – neutral gray */
+  pass: '#757575',
   navbarBackground: '#1A1A1A',
   navbarIcon: '#FFFFFF',
 };

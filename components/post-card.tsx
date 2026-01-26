@@ -323,28 +323,26 @@ function PostCardBase({
                 </Text>
               </View>
             )}
+
+            {/* Like & Pass overlay on image – Hibo colors (love / pass) */}
+            <View style={styles.imageOverlayButtons} pointerEvents={isProcessing ? 'none' : 'auto'}>
+              <TouchableOpacity
+                style={[styles.imageOverlayBtn, { borderColor: Colors.pass }]}
+                onPress={handlePass}
+                disabled={isProcessing || !userId}
+              >
+                <Ionicons name="close" size={28} color={Colors.pass} />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.imageOverlayBtn, { borderColor: Colors.love }]}
+                onPress={handleLike}
+                disabled={isProcessing || !userId}
+              >
+                <Ionicons name="heart-outline" size={28} color={Colors.love} />
+              </TouchableOpacity>
+            </View>
           </View>
         )}
-
-        {/* Action Buttons - Like & Pass (pointerEvents: xaydiid double-tap) */}
-        <View style={styles.actionButtons} pointerEvents={isProcessing ? 'none' : 'auto'}>
-          <TouchableOpacity 
-            style={[styles.actionButton, styles.likeButton, isProcessing && styles.actionButtonDisabled]}
-            onPress={handleLike}
-            disabled={isProcessing || !userId}
-          >
-            <Ionicons name="heart" size={12} color={Colors.green} />
-            <Text style={[styles.actionButtonText, styles.likeButtonText]}>Like</Text>
-          </TouchableOpacity>
-          <TouchableOpacity 
-            style={[styles.actionButton, styles.passButton, isProcessing && styles.actionButtonDisabled]}
-            onPress={handlePass}
-            disabled={isProcessing || !userId}
-          >
-            <Ionicons name="close" size={12} color={Colors.red} />
-            <Text style={[styles.actionButtonText, styles.passButtonText]}>Pass</Text>
-          </TouchableOpacity>
-        </View>
 
         {/* Bio Section - Hinge Style */}
         {(bio || bio_title || postText) && (
@@ -582,43 +580,28 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
   },
-  actionButtons: {
+  imageOverlayButtons: {
+    position: 'absolute',
+    bottom: 16,
+    right: 16,
     flexDirection: 'row',
-    gap: 10,
-    marginBottom: 12,
-    justifyContent: 'flex-start',
-  },
-  actionButton: {
-    backgroundColor: Colors.cardBackground,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    flexDirection: 'row',
+    justifyContent: 'flex-end',
     alignItems: 'center',
+    gap: 12,
+  },
+  imageOverlayBtn: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: 'rgba(255,255,255,0.95)',
+    borderWidth: 2,
     justifyContent: 'center',
-    gap: 4,
-  },
-  likeButton: {
-    borderColor: Colors.green,
-    backgroundColor: '#F0FDF4',
-  },
-  passButton: {
-    borderColor: Colors.red,
-    backgroundColor: '#FEF2F2',
-  },
-  actionButtonText: {
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  likeButtonText: {
-    color: Colors.green,
-  },
-  passButtonText: {
-    color: Colors.red,
-  },
-  actionButtonDisabled: {
-    opacity: 0.5,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 4,
   },
   bioContainer: {
     marginBottom: 12,

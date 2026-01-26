@@ -1,5 +1,4 @@
 import { Colors } from '@/constants/theme';
-import { MatchSkeleton } from '@/components/SkeletonLoader';
 import { Header } from '@/components/header';
 import { getUserMatches, isPremiumUser } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
@@ -7,12 +6,10 @@ import { router } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Dimensions,
-  Image,
   Modal,
   RefreshControl,
-  ScrollView,
+  SectionList,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -21,7 +18,8 @@ import {
 import { Image as ExpoImage } from 'expo-image';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const CARD_WIDTH = (SCREEN_WIDTH - 48) / 2; // 2 columns with padding
+// 2 cards per row: padding (16*2) + gap (8*1) = 32 + 8 = 40
+const CARD_WIDTH = (SCREEN_WIDTH - 40) / 2;
 
 interface MatchProfile {
   match: {
@@ -41,6 +39,25 @@ interface MatchProfile {
     location?: string;
     age?: number;
   } | null;
+}
+
+function dedupByMatchId(arr: MatchProfile[]): MatchProfile[] {
+  const seen = new Set<string>();
+  return arr.filter((m) => {
+    const k = m.match.id;
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+}
+
+// Group items into rows of 2
+function chunkArray<T>(array: T[], chunkSize: number): T[][] {
+  const chunks: T[][] = [];
+  for (let i = 0; i < array.length; i += chunkSize) {
+    chunks.push(array.slice(i, i + chunkSize));
+  }
+  return chunks;
 }
 
 export default function MatchScreen() {
@@ -81,13 +98,10 @@ export default function MatchScreen() {
       }
 
       if (data) {
-        // Filter out matches with null profiles
-        const validMatches = data.filter((m: MatchProfile) => m.profile !== null);
-        // Separate active and expired matches
-        const activeMatches = validMatches.filter((m: MatchProfile) => !m.match.is_expired);
-        const expiredMatches = validMatches.filter((m: MatchProfile) => m.match.is_expired);
-        // Show active matches first, then expired
-        setMatches([...activeMatches, ...expiredMatches]);
+        const valid = (data as MatchProfile[]).filter((m) => m.profile !== null);
+        const active = valid.filter((m) => !m.match.is_expired);
+        const expired = valid.filter((m) => m.match.is_expired);
+        setMatches(dedupByMatchId([...active, ...expired]));
       }
 
       if (isRefresh) {
@@ -131,9 +145,14 @@ export default function MatchScreen() {
     }
   };
 
-  const activeMatches = matches.filter(m => !m.match.is_expired);
-  const expiredMatches = matches.filter(m => m.match.is_expired);
-  
+  const activeMatches = matches.filter((m) => !m.match.is_expired);
+  const expiredMatches = matches.filter((m) => m.match.is_expired);
+
+  const sections = [
+    { title: 'New Matches', data: chunkArray(activeMatches, 2) },
+    { title: 'Expired Matches', data: chunkArray(expiredMatches, 2), subtitle: 'These matches expired because no message was sent within 7 days' },
+  ].filter((s) => s.data.length > 0);
+
   // Calculate matches waiting for reply (no messages sent)
   const matchesWaitingForReply = activeMatches.filter(m => !m.match.has_messaged);
   // Premium users get higher limit (15), free users get 7
@@ -171,10 +190,52 @@ export default function MatchScreen() {
           </Text>
         </View>
       ) : (
-        <ScrollView
-          style={styles.scrollView}
+        <SectionList
+          sections={sections}
+          keyExtractor={(item, index) => {
+            // item is an array of MatchProfiles, use first match id + index
+            const row = item as MatchProfile[];
+            return row.length > 0 ? row[0].match.id : `row-${index}`;
+          }}
+          renderSectionHeader={({ section }) => {
+            // Don't show title for "New Matches", only for "Expired Matches"
+            if (section.title === 'New Matches') {
+              return null;
+            }
+            return (
+              <View style={{ width: '100%' }}>
+                <Text style={[styles.sectionTitle, section.title === 'Expired Matches' && styles.expiredSectionTitle]}>
+                  {section.title}
+                </Text>
+                {section.subtitle && <Text style={styles.expiredSubtitle}>{section.subtitle}</Text>}
+              </View>
+            );
+          }}
+          renderItem={({ item }) => {
+            // item is now an array of 2 MatchProfiles (or fewer for last row)
+            const row = item as MatchProfile[];
+            return (
+              <View style={styles.matchesRow}>
+                {row.map((matchProfile) => {
+                  if (!matchProfile.profile) return null;
+                  return (
+                    <MatchCard
+                      key={matchProfile.match.id}
+                      matchProfile={matchProfile}
+                      onPress={handleMatchPress}
+                      onChatPress={handleChatPress}
+                      isExpired={!!matchProfile.match.is_expired}
+                    />
+                  );
+                })}
+              </View>
+            );
+          }}
+          SectionSeparatorComponent={() => <View style={{ height: 8 }} />}
           contentContainerStyle={styles.contentContainer}
+          style={styles.scrollView}
           showsVerticalScrollIndicator={false}
+          stickySectionHeadersEnabled={false}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -183,38 +244,7 @@ export default function MatchScreen() {
               colors={[Colors.primary]}
             />
           }
-        >
-          {/* Active Matches Section */}
-          {activeMatches.length > 0 && (
-            <>
-              <Text style={styles.sectionTitle}>New Matches</Text>
-              <View style={styles.matchesGrid}>
-                {activeMatches.map((matchProfile) => {
-                  if (!matchProfile.profile) return null;
-                  return <MatchCard key={matchProfile.match.id} matchProfile={matchProfile} onPress={handleMatchPress} onChatPress={handleChatPress} />;
-                })}
-              </View>
-            </>
-          )}
-
-          {/* Expired Matches Section */}
-          {expiredMatches.length > 0 && (
-            <>
-              <Text style={[styles.sectionTitle, styles.expiredSectionTitle]}>
-                Expired Matches
-              </Text>
-              <Text style={styles.expiredSubtitle}>
-                These matches expired because no message was sent within 7 days
-              </Text>
-          <View style={styles.matchesGrid}>
-                {expiredMatches.map((matchProfile) => {
-              if (!matchProfile.profile) return null;
-                  return <MatchCard key={matchProfile.match.id} matchProfile={matchProfile} onPress={handleMatchPress} onChatPress={handleChatPress} isExpired />;
-                })}
-              </View>
-            </>
-          )}
-        </ScrollView>
+        />
       )}
 
       {/* Limit Warning Modal */}
@@ -282,19 +312,19 @@ export default function MatchScreen() {
   );
 }
 
-// Match Card Component
-function MatchCard({ 
-  matchProfile, 
-  onPress, 
-  onChatPress, 
-  isExpired = false 
-}: { 
-  matchProfile: MatchProfile; 
+const MatchCard = React.memo(function MatchCard({
+  matchProfile,
+  onPress,
+  onChatPress,
+  isExpired = false,
+}: {
+  matchProfile: MatchProfile;
   onPress: (m: MatchProfile) => void;
   onChatPress: (m: MatchProfile, e: any) => void;
   isExpired?: boolean;
 }) {
-              const { profile, match } = matchProfile;
+  const { profile, match } = matchProfile;
+  if (!profile) return null;
               const fullName = `${profile.first_name} ${profile.last_name}`;
               const mainPhoto = profile.photos && profile.photos.length > 0 ? profile.photos[0] : null;
               
@@ -375,21 +405,17 @@ function MatchCard({
                     </View>
                   </TouchableOpacity>
       {!isExpired && (
-                  <TouchableOpacity
+        <TouchableOpacity
           style={[styles.chatButton, match.has_messaged && styles.chatButtonActive]}
           onPress={(e) => onChatPress(matchProfile, e)}
-                    activeOpacity={0.7}
-                  >
-          <Ionicons 
-            name={match.has_messaged ? "chatbubble" : "chatbubble-outline"} 
-            size={20} 
-            color={Colors.cardBackground} 
-          />
-                  </TouchableOpacity>
+          activeOpacity={0.7}
+        >
+          <Ionicons name={match.has_messaged ? 'chatbubble' : 'chatbubble-outline'} size={20} color={Colors.cardBackground} />
+        </TouchableOpacity>
       )}
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   container: {
@@ -459,17 +485,16 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     fontStyle: 'italic',
   },
-  matchesGrid: {
+  matchesRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
     justifyContent: 'space-between',
-    gap: 12,
-    marginBottom: 8,
+    gap: 8,
+    marginBottom: 12,
+    paddingHorizontal: 0,
   },
   matchCardWrapper: {
     width: CARD_WIDTH,
     position: 'relative',
-    marginBottom: 16,
   },
   expiredCardWrapper: {
     opacity: 0.6,
@@ -477,7 +502,7 @@ const styles = StyleSheet.create({
   matchCard: {
     width: '100%',
     backgroundColor: Colors.cardBackground,
-    borderRadius: 20,
+    borderRadius: 8,
     overflow: 'hidden',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
@@ -515,7 +540,7 @@ const styles = StyleSheet.create({
   },
   matchPhotoContainer: {
     width: '100%',
-    height: CARD_WIDTH * 1.3,
+    aspectRatio: 0.75, // 3:4 ratio (portrait)
     position: 'relative',
     backgroundColor: Colors.borderLight,
   },
