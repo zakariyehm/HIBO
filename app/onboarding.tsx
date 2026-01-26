@@ -6,6 +6,7 @@
 import { Button } from '@/components/ui/button';
 import { Colors } from '@/constants/theme';
 import {
+  createPrompt,
   createUserProfile,
   signUpWithEmail,
   uploadDocument,
@@ -16,7 +17,7 @@ import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -129,6 +130,25 @@ const PERSONALITY_TRAITS = [
   { trait: 'Spontaneous', emoji: '✨' },
   { trait: 'Thoughtful', emoji: '🤔' },
   { trait: 'Witty', emoji: '😏' },
+];
+
+// Profile prompts for user to answer
+const PROFILE_PROMPTS = [
+  "My ideal date is...",
+  "A fun fact about me...",
+  "I'm looking for someone who...",
+  "My biggest goal is...",
+  "I'm most attracted to...",
+  "The way to my heart is...",
+  "I spend my free time...",
+  "My favorite thing about myself is...",
+  "I'm weirdly attracted to...",
+  "The best way to ask me out is...",
+  "I'll fall for you if...",
+  "My love language is...",
+  "I'm the type of person who...",
+  "My perfect weekend looks like...",
+  "I value most in a partner...",
 ];
 
 // Return emoji for option groups
@@ -334,6 +354,8 @@ const OnboardingScreen = () => {
   const [professionSearch, setProfessionSearch] = useState('');
   const [countryCode, setCountryCode] = useState('+252');
   const [phoneNumber, setPhoneNumber] = useState('');
+  const [showPromptModal, setShowPromptModal] = useState(false);
+  const [selectedPromptIndex, setSelectedPromptIndex] = useState<number | null>(null);
 
   // Base questions
   const baseQuestions = [
@@ -358,6 +380,7 @@ const OnboardingScreen = () => {
       section2: { title: "I'd like to be married within", options: ['1-2 months', '3-4 months', '4-12 months', '1-2 years', '3-4 years', '4+ years', 'Agree together'] }
     },
     { key: 'interests', title: 'What are your interests? (Select all that apply)', type: 'multiSelect', options: ['Travel', 'Music', 'Fitness', 'Food', 'Movies', 'Sports', 'Art', 'Reading', 'Gaming', 'Outdoor activities'] },
+    { key: 'profilePrompts', title: 'Write your profile answers', type: 'profilePrompts', required: 3 },
     { key: 'photos', title: 'Upload 3 photos', type: 'imageUpload', required: 3 },
     { key: 'source', title: 'How did you hear about HIBO?', type: 'select', options: ['Instagram', 'Facebook', 'TikTok', 'YouTube', 'Friend', 'Other'] },
     { key: 'documentType', title: 'What document do you have?', type: 'select', options: ['Passport', 'Driver License', 'National ID'] },
@@ -384,7 +407,6 @@ const OnboardingScreen = () => {
   const questions = useMemo(() => [
     ...baseQuestions,
     ...dynamicQuestions,
-    { key: 'bio', title: 'Tell us about yourself', type: 'input', keyboard: 'default' as const, placeholder: 'Write a short bio...' },
   ], [dynamicQuestions]);
 
   // Request image picker permissions
@@ -557,15 +579,6 @@ const OnboardingScreen = () => {
       case 'location':
         validationResult = validateLocation(value);
         break;
-      case 'bio':
-        if (!value.trim()) {
-          validationResult = { isValid: false, error: 'Bio is required' };
-        } else if (value.trim().length < 10) {
-          validationResult = { isValid: false, error: 'Bio must be at least 10 characters' };
-        } else {
-          validationResult = { isValid: true, error: '' };
-        }
-        break;
       case 'nationalIdNumber':
         validationResult = validateNationalIdNumber(value);
         break;
@@ -614,6 +627,15 @@ const OnboardingScreen = () => {
       const selections = onboardingData[currentQuestion.key] || [];
       if (selections.length !== 1) {
         Alert.alert('Required', 'Please select your nationality');
+        return;
+      }
+    }
+    // Validate profile prompts
+    if (currentQuestion.type === 'profilePrompts') {
+      const prompts = onboardingData.profilePrompts || [];
+      const completedPrompts = prompts.filter((p: any) => p.prompt && p.answer && p.answer.trim().length > 0);
+      if (completedPrompts.length < (currentQuestion.required || 3)) {
+        Alert.alert('Required', `Please complete ${currentQuestion.required || 3} profile answers`);
         return;
       }
     }
@@ -804,6 +826,15 @@ const OnboardingScreen = () => {
       }
 
       // Step 4: Prepare profile data
+      // Combine profile prompts into bio (Hinge style)
+      const profilePrompts = onboardingData.profilePrompts || [];
+      const completedPrompts = profilePrompts.filter((p: any) => p.prompt && p.answer && p.answer.trim().length > 0);
+      
+      // Format prompts as bio text (like Hinge)
+      const bioText = completedPrompts.map((p: any) => {
+        return `${p.prompt}\n${p.answer}`;
+      }).join('\n\n');
+
       const profileData = {
         email: email.trim(),
         first_name: onboardingData.firstName || '',
@@ -830,7 +861,7 @@ const OnboardingScreen = () => {
         document_type: onboardingData.documentType || '',
         ...documentUrls,
         national_id_number: onboardingData.nationalIdNumber || null,
-        bio: onboardingData.bio || '',
+        bio: bioText || '',
       };
 
       // Step 5: Create user profile in database
@@ -841,6 +872,27 @@ const OnboardingScreen = () => {
         setAccountError('Account created but failed to save profile. Please contact support.');
         setAccountLoading(false);
         return;
+      }
+
+      // Step 6: Save prompts to prompts table (Supabase)
+      if (completedPrompts.length > 0) {
+        // console.log('📝 Saving prompts to database...');
+        const promptPromises = completedPrompts.map((prompt: any, index: number) => {
+          return createPrompt(prompt.prompt, prompt.answer, index);
+        });
+        
+        const promptResults = await Promise.allSettled(promptPromises);
+        
+        // Check for errors (log but don't fail the whole process)
+        promptResults.forEach((result, index) => {
+          if (result.status === 'rejected') {
+            console.error(`❌ Failed to save prompt ${index}:`, result.reason);
+          } else if (result.value?.error) {
+            console.error(`❌ Error saving prompt ${index}:`, result.value.error);
+          }
+        });
+        
+        // console.log('✅ Prompts saved to database');
       }
 
       // Success!
@@ -947,6 +999,53 @@ const OnboardingScreen = () => {
     }
   };
 
+  // Initialize profile prompts when step changes to profilePrompts
+  useEffect(() => {
+    const currentQuestion = questions[step];
+    if (currentQuestion?.type === 'profilePrompts') {
+      if (!onboardingData.profilePrompts || onboardingData.profilePrompts.length === 0) {
+        setOnboardingData({
+          ...onboardingData,
+          profilePrompts: [
+            { prompt: '', answer: '' },
+            { prompt: '', answer: '' },
+            { prompt: '', answer: '' },
+          ]
+        });
+      }
+    }
+  }, [step]);
+
+  // Handle prompt selection
+  const handleSelectPrompt = (promptIndex: number, promptText: string) => {
+    const currentPrompts = onboardingData.profilePrompts || [];
+    const updatedPrompts = [...currentPrompts];
+    updatedPrompts[promptIndex] = {
+      ...updatedPrompts[promptIndex],
+      prompt: promptText
+    };
+    setOnboardingData({
+      ...onboardingData,
+      profilePrompts: updatedPrompts
+    });
+    setShowPromptModal(false);
+    setSelectedPromptIndex(null);
+  };
+
+  // Handle answer update
+  const handleUpdateAnswer = (promptIndex: number, answer: string) => {
+    const currentPrompts = onboardingData.profilePrompts || [];
+    const updatedPrompts = [...currentPrompts];
+    updatedPrompts[promptIndex] = {
+      ...updatedPrompts[promptIndex],
+      answer: answer
+    };
+    setOnboardingData({
+      ...onboardingData,
+      profilePrompts: updatedPrompts
+    });
+  };
+
   const handleBack = () => {
     if (showCreateAccount) {
       // Go back from create account screen to last question
@@ -1003,6 +1102,12 @@ const OnboardingScreen = () => {
       return true;
     }
     
+    if (currentQuestion.type === 'profilePrompts') {
+      const prompts = onboardingData.profilePrompts || [];
+      const completedPrompts = prompts.filter((p: any) => p.prompt && p.answer && p.answer.trim().length > 0);
+      return completedPrompts.length >= (currentQuestion.required || 3);
+    }
+    
     if (currentQuestion.type === 'imageUpload') {
       const photos = onboardingData.photos || [];
       return photos.length >= (currentQuestion.required || 3);
@@ -1031,8 +1136,6 @@ const OnboardingScreen = () => {
         return validateHeight(currentValue).isValid;
       case 'location':
         return validateLocation(currentValue).isValid;
-      case 'bio':
-        return currentValue.trim().length >= 10;
       case 'nationalIdNumber':
         return validateNationalIdNumber(currentValue).isValid;
       default:
@@ -1618,6 +1721,138 @@ const OnboardingScreen = () => {
               </View>
             </View>
           </ScrollView>
+        ) : currentQuestion.type === 'profilePrompts' ? (
+          <>
+            {(() => {
+              const prompts = onboardingData.profilePrompts || [
+                { prompt: '', answer: '' },
+                { prompt: '', answer: '' },
+                { prompt: '', answer: '' },
+              ];
+              const completedCount = prompts.filter((p: any) => p.prompt && p.answer && p.answer.trim().length > 0).length;
+              
+              return (
+                <ScrollView 
+                  style={[styles.scrollContainer, { marginBottom: 0 }]}
+                  contentContainerStyle={styles.scrollContent}
+                  showsVerticalScrollIndicator={false}
+                >
+                  <View style={styles.profilePromptsContainer}>
+                    {prompts.map((promptData: any, index: number) => (
+                      <View key={index} style={styles.promptAnswerCard}>
+                        <View style={styles.promptSelectorContainer}>
+                          <TouchableOpacity
+                            style={styles.promptSelector}
+                            onPress={() => {
+                              setSelectedPromptIndex(index);
+                              setShowPromptModal(true);
+                            }}
+                          >
+                            <Text style={[
+                              styles.promptSelectorText,
+                              promptData.prompt && styles.promptSelectorTextSelected
+                            ]}>
+                              {promptData.prompt || 'Select a Prompt'}
+                            </Text>
+                            <Text style={styles.promptSelectorHint}>
+                              And write your own answer
+                            </Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={styles.promptAddButton}
+                            onPress={() => {
+                              setSelectedPromptIndex(index);
+                              setShowPromptModal(true);
+                            }}
+                          >
+                            <Ionicons name="add-circle" size={32} color={Colors.primary} />
+                          </TouchableOpacity>
+                        </View>
+                        {promptData.prompt && (
+                          <TextInput
+                            style={styles.promptAnswerInput}
+                            placeholder="Write your answer..."
+                            placeholderTextColor={theme.placeholder}
+                            value={promptData.answer || ''}
+                            onChangeText={(text) => handleUpdateAnswer(index, text)}
+                            multiline
+                            numberOfLines={3}
+                            textAlignVertical="top"
+                          />
+                        )}
+                      </View>
+                    ))}
+                    <Text style={styles.promptsRequiredText}>
+                      {currentQuestion.required || 3} answers required
+                    </Text>
+                  </View>
+                </ScrollView>
+              );
+            })()}
+            
+            {/* Prompt Selection Modal */}
+            {showPromptModal && (
+              <View 
+                style={[styles.modalOverlay, { paddingBottom: Math.max(40, insets.bottom + 20) }]}
+              >
+                <TouchableOpacity
+                  style={styles.modalOverlayBackdrop}
+                  activeOpacity={1}
+                  onPress={() => {
+                    setShowPromptModal(false);
+                    setSelectedPromptIndex(null);
+                  }}
+                />
+                <View style={styles.modalContainer}>
+                  <View style={styles.modalHeader}>
+                    <Text style={styles.modalTitle}>Select a Prompt</Text>
+                    <TouchableOpacity
+                      style={styles.modalCloseButton}
+                      onPress={() => {
+                        setShowPromptModal(false);
+                        setSelectedPromptIndex(null);
+                      }}
+                    >
+                      <Ionicons name="close" size={24} color={theme.black} />
+                    </TouchableOpacity>
+                  </View>
+                  <ScrollView 
+                    style={styles.modalScrollView}
+                    contentContainerStyle={styles.modalScrollContent}
+                    showsVerticalScrollIndicator={false}
+                  >
+                    {PROFILE_PROMPTS.map((prompt, index) => {
+                      const isAlreadyUsed = onboardingData.profilePrompts?.some(
+                        (p: any, idx: number) => p.prompt === prompt && idx !== selectedPromptIndex
+                      );
+                      return (
+                        <TouchableOpacity
+                          key={index}
+                          style={[
+                            styles.modalPromptOption,
+                            isAlreadyUsed && styles.modalPromptOptionDisabled
+                          ]}
+                          onPress={() => {
+                            if (!isAlreadyUsed && selectedPromptIndex !== null) {
+                              handleSelectPrompt(selectedPromptIndex, prompt);
+                            }
+                          }}
+                          disabled={isAlreadyUsed}
+                        >
+                          <Text style={[
+                            styles.modalPromptText,
+                            isAlreadyUsed && styles.modalPromptTextDisabled
+                          ]}>
+                            {prompt}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </ScrollView>
+                </View>
+              </View>
+            )}
+          </>
         ) : currentQuestion.type === 'phoneInput' ? (
           <>
             <View style={styles.phoneInputContainer}>
@@ -1709,8 +1944,8 @@ const OnboardingScreen = () => {
             />
           </>
         )}
-        {/* Continue button for multiSelect, personalitySelect, nationalitySelect, marriageIntentions, imageUpload, documentUpload, and documentUploadDouble at bottom */}
-        {(isMultiSelect || currentQuestion.type === 'personalitySelect' || currentQuestion.type === 'nationalitySelect' || currentQuestion.type === 'marriageIntentions' || currentQuestion.type === 'imageUpload' || currentQuestion.type === 'documentUpload' || currentQuestion.type === 'documentUploadDouble') && (
+        {/* Continue button for multiSelect, personalitySelect, nationalitySelect, marriageIntentions, profilePrompts, imageUpload, documentUpload, and documentUploadDouble at bottom */}
+        {(isMultiSelect || currentQuestion.type === 'personalitySelect' || currentQuestion.type === 'nationalitySelect' || currentQuestion.type === 'marriageIntentions' || currentQuestion.type === 'profilePrompts' || currentQuestion.type === 'imageUpload' || currentQuestion.type === 'documentUpload' || currentQuestion.type === 'documentUploadDouble') && (
           <>
             <Button
               title={
@@ -1720,6 +1955,14 @@ const OnboardingScreen = () => {
                   ? (isCurrentInputValid()
                       ? `continue`
                       : `Select nationality`)
+                  : currentQuestion.type === 'profilePrompts'
+                  ? (() => {
+                      const prompts = onboardingData.profilePrompts || [];
+                      const completedCount = prompts.filter((p: any) => p.prompt && p.answer && p.answer.trim().length > 0).length;
+                      return isCurrentInputValid()
+                        ? `continue (${completedCount}/${currentQuestion.required || 3})`
+                        : `complete ${currentQuestion.required || 3} answers (${completedCount}/${currentQuestion.required || 3})`;
+                    })()
                   : isMultiSelect 
                   ? (isCurrentInputValid() 
                       ? `continue (${currentSelections.length} selected)`
@@ -2406,6 +2649,134 @@ const styles = StyleSheet.create({
   finalContinueText: {
     fontSize: 18,
     fontWeight: '600',
+  },
+  profilePromptsContainer: {
+    width: '100%',
+    paddingBottom: 20,
+  },
+  promptAnswerCard: {
+    width: '100%',
+    marginBottom: 20,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: theme.lightGray,
+    borderStyle: 'dashed',
+    borderRadius: 12,
+    backgroundColor: theme.secondary,
+  },
+  promptSelectorContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 12,
+  },
+  promptSelector: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+  },
+  promptSelectorText: {
+    fontSize: 16,
+    color: theme.placeholder,
+    fontWeight: '500',
+    marginBottom: 4,
+  },
+  promptSelectorTextSelected: {
+    color: theme.black,
+    fontWeight: '600',
+  },
+  promptSelectorHint: {
+    fontSize: 12,
+    color: theme.placeholder,
+    fontStyle: 'italic',
+  },
+  promptAddButton: {
+    padding: 4,
+    marginLeft: 8,
+  },
+  promptAnswerInput: {
+    width: '100%',
+    minHeight: 80,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: theme.lightGray,
+    borderRadius: 8,
+    fontSize: 16,
+    color: theme.black,
+    backgroundColor: theme.white,
+    textAlignVertical: 'top',
+  },
+  promptsRequiredText: {
+    fontSize: 14,
+    color: theme.gray,
+    textAlign: 'left',
+    marginTop: 8,
+  },
+  modalOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'flex-end',
+    zIndex: 1000,
+  },
+  modalOverlayBackdrop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  modalContainer: {
+    backgroundColor: theme.white,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '80%',
+    paddingBottom: 40,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.lightGray,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: theme.black,
+  },
+  modalCloseButton: {
+    padding: 4,
+  },
+  modalScrollView: {
+    maxHeight: 400,
+  },
+  modalScrollContent: {
+    padding: 20,
+  },
+  modalPromptOption: {
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    backgroundColor: theme.secondary,
+    borderRadius: 0,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#000',
+  },
+  modalPromptOptionDisabled: {
+    opacity: 0.5,
+    backgroundColor: theme.lightGray,
+  },
+  modalPromptText: {
+    fontSize: 16,
+    color: theme.black,
+    fontWeight: '500',
+  },
+  modalPromptTextDisabled: {
+    color: theme.gray,
   },
 });
 

@@ -82,6 +82,21 @@ interface UserProfile {
   updated_at?: string;
 }
 
+// Parse bio field to extract prompts (format: "Prompt\nAnswer\n\nPrompt\nAnswer...")
+const parseBioToPrompts = (bio: string | undefined): Array<{ prompt: string; answer: string }> => {
+  if (!bio || !bio.trim()) return [];
+  
+  // Split by double newlines to get prompt-answer pairs
+  const pairs = bio.split('\n\n').filter(pair => pair.trim().length > 0);
+  
+  return pairs.map(pair => {
+    const lines = pair.split('\n');
+    const prompt = lines[0]?.trim() || '';
+    const answer = lines.slice(1).join('\n').trim() || '';
+    return { prompt, answer };
+  }).filter(p => p.prompt && p.answer); // Only return pairs with both prompt and answer
+};
+
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
@@ -98,6 +113,10 @@ export default function ProfileScreen() {
   const [posts, setPosts] = useState<Post[]>([]);
   const [newPostTitle, setNewPostTitle] = useState('');
   const [newPostImage, setNewPostImage] = useState<string | null>(null);
+  
+  const bioPrompts = React.useMemo(() => {
+    return parseBioToPrompts(userProfile?.bio);
+  }, [userProfile?.bio]);
   const [newPostDescription, setNewPostDescription] = useState('');
   const [posting, setPosting] = useState(false);
   const [prompts, setPrompts] = useState<Prompt[]>([]);
@@ -928,34 +947,38 @@ export default function ProfileScreen() {
           )
         )}
 
-        {/* Bio Card - Hinge Style */}
+        {/* Bio/Prompts Card - Hinge Style */}
           <View style={styles.bioCard}>
           {activeTab === 'edit' ? (
-            <>
-              <TextInput
-                style={styles.bioTitleInput}
-                value={editingProfile?.bio_title || ''}
-                onChangeText={(text) => setEditingProfile({ ...editingProfile, bio_title: text })}
-                placeholder="I want someone who..."
-                placeholderTextColor={theme.placeholder}
-              />
-              <TextInput
-                style={styles.bioInput}
-                value={editingProfile?.bio || ''}
-                onChangeText={(text) => setEditingProfile({ ...editingProfile, bio: text })}
-                placeholder="is family oriented, thoughtful and knows how to have a good time!!"
-                placeholderTextColor={theme.placeholder}
-                multiline
-                numberOfLines={4}
-                textAlignVertical="top"
-              />
-            </>
+            <View style={styles.bioPromptsEditContainer}>
+              <Text style={styles.sectionInfoText}>
+                Edit your prompts in the Prompts section below
+              </Text>
+              {bioPrompts.length > 0 && (
+                <View style={styles.bioPromptsPreview}>
+                  {bioPrompts.map((item, index) => (
+                    <View key={index} style={styles.bioPromptPreviewCard}>
+                      <Text style={styles.bioPromptPreviewQuestion}>{item.prompt}</Text>
+                      <Text style={styles.bioPromptPreviewAnswer}>{item.answer}</Text>
+                    </View>
+                  ))}
+                </View>
+              )}
+            </View>
           ) : (
             <View style={styles.bioViewContainer}>
-              {userProfile.bio_title && (
-                <Text style={styles.bioTitleText}>{userProfile.bio_title}</Text>
+              {bioPrompts.length > 0 ? (
+                <View style={styles.bioPromptsList}>
+                  {bioPrompts.map((item, index) => (
+                    <View key={index} style={styles.bioPromptCard}>
+                      <Text style={styles.bioPromptQuestion}>{item.prompt}</Text>
+                      <Text style={styles.bioPromptAnswer}>{item.answer}</Text>
+                    </View>
+                  ))}
+                </View>
+              ) : (
+                <Text style={styles.bioText}>No prompts yet</Text>
               )}
-              <Text style={styles.bioText}>{userProfile.bio || 'No bio yet'}</Text>
             </View>
           )}
           </View>
@@ -1913,6 +1936,60 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     lineHeight: 32,
     textAlign: 'left',
+  },
+  bioPromptsList: {
+    width: '100%',
+  },
+  bioPromptCard: {
+    marginBottom: 16,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.lightGray,
+  },
+  bioPromptQuestion: {
+    fontSize: 14,
+    color: theme.gray,
+    fontWeight: '400',
+    marginBottom: 8,
+  },
+  bioPromptAnswer: {
+    fontSize: 24,
+    color: theme.black,
+    fontWeight: '700',
+    lineHeight: 32,
+    textAlign: 'left',
+  },
+  bioPromptsEditContainer: {
+    width: '100%',
+  },
+  bioPromptsPreview: {
+    width: '100%',
+    marginTop: 12,
+  },
+  bioPromptPreviewCard: {
+    marginBottom: 16,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.lightGray,
+  },
+  bioPromptPreviewQuestion: {
+    fontSize: 14,
+    color: theme.gray,
+    fontWeight: '400',
+    marginBottom: 8,
+  },
+  bioPromptPreviewAnswer: {
+    fontSize: 24,
+    color: theme.black,
+    fontWeight: '700',
+    lineHeight: 32,
+    textAlign: 'left',
+  },
+  sectionInfoText: {
+    fontSize: 14,
+    color: theme.gray,
+    fontStyle: 'italic',
+    marginBottom: 8,
   },
   editButton: {
     marginHorizontal: 20,

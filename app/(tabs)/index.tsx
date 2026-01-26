@@ -33,9 +33,159 @@ function dedupById<T extends { id: string }>(arr: T[]): T[] {
   });
 }
 
+// Parse bio field to extract prompts (format: "Prompt\nAnswer\n\nPrompt\nAnswer...")
+const parseBioToPrompts = (bio: string | undefined): Array<{ prompt: string; answer: string }> => {
+  if (!bio || !bio.trim()) return [];
+  
+  // Split by double newlines to get prompt-answer pairs
+  const pairs = bio.split('\n\n').filter(pair => pair.trim().length > 0);
+  
+  return pairs.map(pair => {
+    const lines = pair.split('\n');
+    const prompt = lines[0]?.trim() || '';
+    const answer = lines.slice(1).join('\n').trim() || '';
+    return { prompt, answer };
+  }).filter(p => p.prompt && p.answer); // Only return pairs with both prompt and answer
+};
+
+// Content block types
+type ContentBlockType = 'photo' | 'prompt';
+
+interface ContentBlock {
+  type: ContentBlockType;
+  photoIndex?: number; // For photos
+  photoUrl?: string; // For photos
+  prompt?: { prompt: string; answer: string }; // For prompts (can be included with photo too)
+}
+
+interface FeedItem {
+  profile: UserProfile;
+  contentBlock: ContentBlock;
+  score: number; // For ranking
+}
+
+// Select best content block for a user (Hinge algorithm)
+// Strategy: If user has both photo and prompt, show PHOTO + PROMPT in same card
+// If only photo, show photo. If only prompt, show prompt.
+const selectBestContentBlock = (profile: UserProfile): ContentBlock | null => {
+  const photos = profile.photos || [];
+  const bio = profile.bio || '';
+  const prompts = parseBioToPrompts(bio);
+  
+  // If no photos and no prompts, return null
+  if (photos.length === 0 && prompts.length === 0) {
+    return null;
+  }
+  
+  // Score prompts (for now, use simple heuristics - can be enhanced with engagement data)
+  const promptScores = prompts.map((prompt, index) => {
+    let score = 0;
+    // Longer answers tend to be more engaging
+    score += prompt.answer.length * 0.1;
+    // Prompts with questions tend to be more engaging
+    if (prompt.prompt.includes('?') || prompt.prompt.includes('...')) {
+      score += 10;
+    }
+    return { prompt, index, score };
+  });
+  
+  // Score photos (for now, use order - first photo is usually best)
+  const photoScores = photos.map((photo, index) => {
+    let score = 100 - (index * 10); // First photo gets highest score
+    return { photo, index, score };
+  });
+  
+  // Find best prompt
+  const bestPrompt = promptScores.length > 0 
+    ? promptScores.reduce((best, current) => current.score > best.score ? current : best)
+    : null;
+  
+  // Find best photo
+  const bestPhoto = photoScores.length > 0
+    ? photoScores.reduce((best, current) => current.score > best.score ? current : best)
+    : null;
+  
+  // Strategy: If user has both photo and prompt, show PHOTO + PROMPT together
+  // This matches Hinge's behavior: image with prompt below it
+  if (bestPhoto && bestPrompt) {
+    // Return photo type, but include prompt for display below image
+    return {
+      type: 'photo',
+      photoIndex: bestPhoto.index,
+      photoUrl: bestPhoto.photo,
+      prompt: bestPrompt.prompt // Include prompt to show below image
+    };
+  } else if (bestPhoto) {
+    // Only photo available
+    return {
+      type: 'photo',
+      photoIndex: bestPhoto.index,
+      photoUrl: bestPhoto.photo
+    };
+  } else if (bestPrompt) {
+    // Only prompt available
+    return {
+      type: 'prompt',
+      prompt: bestPrompt.prompt
+    };
+  }
+  
+  return null;
+};
+
+// Transform profiles into feed items - HINGE STYLE: ONE USER = ONE CARD
+// Each user gets ONE feed item with their BEST content block (photo OR prompt)
+const transformProfilesToFeedItems = (profiles: UserProfile[]): FeedItem[] => {
+  return profiles
+    .map(profile => {
+      // Select the BEST content block for this user
+      const contentBlock = selectBestContentBlock(profile);
+      if (!contentBlock) return null;
+      
+      // Calculate compatibility score for ranking
+      let score = 0;
+      
+      // Active users get higher score
+      if (profile.last_active) {
+        const lastActive = new Date(profile.last_active).getTime();
+        const now = Date.now();
+        const hoursSinceActive = (now - lastActive) / (1000 * 60 * 60);
+        if (hoursSinceActive < 1) score += 50; // Online
+        else if (hoursSinceActive < 24) score += 30; // Active today
+        else if (hoursSinceActive < 168) score += 10; // Active this week
+      }
+      
+      // New profiles get slight boost
+      const daysSinceCreated = (Date.now() - new Date(profile.created_at).getTime()) / (1000 * 60 * 60 * 24);
+      if (daysSinceCreated < 7) score += 5;
+      
+      // Add content-specific score
+      if (contentBlock.type === 'prompt' && contentBlock.prompt) {
+        // Longer answers tend to be more engaging
+        score += contentBlock.prompt.answer.length * 0.1;
+        // Prompts with questions tend to be more engaging
+        if (contentBlock.prompt.prompt.includes('?') || contentBlock.prompt.prompt.includes('...')) {
+          score += 10;
+        }
+      } else if (contentBlock.type === 'photo') {
+        // First photos are usually better
+        score += 100 - ((contentBlock.photoIndex || 0) * 10);
+      }
+      
+      return {
+        profile,
+        contentBlock,
+        score
+      };
+    })
+    .filter((item): item is FeedItem => item !== null)
+    .sort((a, b) => b.score - a.score); // Sort by score descending (best users/content first)
+};
+
 export default function HomeScreen() {
   const [userProfiles, setUserProfiles] = useState<UserProfile[]>([]);
   const [allProfiles, setAllProfiles] = useState<UserProfile[]>([]); // Store all unfiltered profiles
+  const [feedItems, setFeedItems] = useState<FeedItem[]>([]); // Hinge-style feed items
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
@@ -223,6 +373,14 @@ export default function HomeScreen() {
                     : profile
                 )
               );
+              // Also update feed items
+              setFeedItems((prev) =>
+                prev.map((item) =>
+                  item.profile.id === profileId
+                    ? { ...item, profile: { ...item.profile, last_active: updatedProfile.last_active } }
+                    : item
+                )
+              );
             }
           }
         }
@@ -236,6 +394,7 @@ export default function HomeScreen() {
     statusRefreshRef.current = setInterval(() => {
       // Trigger re-render by updating state (status is calculated client-side)
       setUserProfiles((prev) => [...prev]);
+      setFeedItems((prev) => [...prev]);
     }, 10000); // 10 seconds
 
     // Cleanup subscription on unmount
@@ -359,12 +518,16 @@ export default function HomeScreen() {
         });
 
         const uniq = dedupById(profiles);
+        // Transform profiles to feed items (Hinge algorithm)
+        const items = transformProfilesToFeedItems(uniq);
+        
         if (filtersApplied) {
           setAllProfiles(uniq);
           applyFilters(uniq);
           setHasMoreProfiles(false);
         } else {
           setUserProfiles(uniq);
+          setFeedItems(items); // Set feed items for Hinge-style display
           setAllProfiles([]);
           setHasMoreProfiles(uniq.length === 0 ? false : hasMore);
         }
@@ -385,7 +548,7 @@ export default function HomeScreen() {
   };
 
   const loadMoreProfiles = useCallback(async () => {
-    if (loadingMore || !hasMoreProfiles || filtersApplied || userProfiles.length === 0) return;
+    if (loadingMore || !hasMoreProfiles || filtersApplied || feedItems.length === 0) return;
     setLoadingMore(true);
     try {
       const res = await getUserProfilesPaginated(currentUserId || undefined, {
@@ -407,11 +570,17 @@ export default function HomeScreen() {
           return false;
         });
       }
-      setUserProfiles((prev) => {
-        const have = new Set(prev.map((p) => p.id));
-        const toAdd = (valid as UserProfile[]).filter((v) => !have.has(v.id));
-        return toAdd.length ? [...prev, ...toAdd] : prev;
+      const newProfiles = (valid as UserProfile[]).filter((v) => {
+        const have = new Set(userProfiles.map((p) => p.id));
+        return !have.has(v.id);
       });
+      
+      if (newProfiles.length > 0) {
+        setUserProfiles((prev) => [...prev, ...newProfiles]);
+        // Transform new profiles to feed items
+        const newFeedItems = transformProfilesToFeedItems(newProfiles);
+        setFeedItems((prev) => [...prev, ...newFeedItems]);
+      }
       setHasMoreProfiles(res.hasMore);
     } finally {
       setLoadingMore(false);
@@ -487,7 +656,7 @@ export default function HomeScreen() {
             </React.Fragment>
           ))}
         </ScrollView>
-      ) : userProfiles.length === 0 ? (
+      ) : feedItems.length === 0 ? (
         <View style={styles.emptyContainer}>
           <Text style={styles.emptyText}>No profiles found</Text>
           <Text style={styles.emptySubtext}>
@@ -496,12 +665,46 @@ export default function HomeScreen() {
         </View>
       ) : (
         <FlatList
-          data={userProfiles}
-          keyExtractor={(item) => item.id}
-          renderItem={({ item: profile, index }) => {
+          data={feedItems}
+          keyExtractor={(item) => item.profile.id}
+          renderItem={({ item: feedItem, index }) => {
+            const profile = feedItem.profile;
+            const contentBlock = feedItem.contentBlock;
             const fullName = profile.first_name;
             const username = profile.first_name.toLowerCase();
-            const mainPhoto = profile.photos?.length > 0 ? profile.photos[0] : undefined;
+            
+            // Prepare content based on content block type
+            let displayPhotos: string[] = [];
+            let displayPrompts: Array<{ question: string; answer: string }> = [];
+            let profileImage: string | undefined;
+            let bioTitle: string | undefined;
+            let bioText: string | undefined;
+            
+            if (contentBlock.type === 'photo' && contentBlock.photoUrl) {
+              // Show the selected photo
+              displayPhotos = [contentBlock.photoUrl];
+              profileImage = contentBlock.photoUrl;
+              
+              // If prompt is included with photo, show it below the image (Hinge style)
+              if (contentBlock.prompt) {
+                bioTitle = contentBlock.prompt.prompt;
+                bioText = contentBlock.prompt.answer;
+                displayPrompts = [];
+              } else {
+                // No prompt, don't show bio
+                bioTitle = undefined;
+                bioText = undefined;
+              }
+            } else if (contentBlock.type === 'prompt' && contentBlock.prompt) {
+              // Show only the selected prompt - use bio section (not prompts section to avoid duplication)
+              bioTitle = contentBlock.prompt.prompt;
+              bioText = contentBlock.prompt.answer;
+              // Don't pass prompts array to avoid duplication
+              displayPrompts = [];
+              // Use first photo as profile image
+              profileImage = profile.photos?.length > 0 ? profile.photos[0] : undefined;
+            }
+            
             return (
               <PostCard
                 profileName={fullName}
@@ -509,11 +712,12 @@ export default function HomeScreen() {
                 username={username}
                 timeAgo={getTimeAgo(profile.created_at)}
                 lastActive={profile.last_active}
-                profileImage={mainPhoto}
-                photos={profile.photos}
-                bio_title={profile.bio_title}
-                bio={profile.bio}
-                postText={profile.bio}
+                profileImage={profileImage}
+                photos={displayPhotos}
+                bio_title={bioTitle}
+                bio={bioText}
+                postText={bioText}
+                prompts={displayPrompts}
                 nationality={profile.nationality}
                 userId={profile.id}
                 commentCount={0}
@@ -521,14 +725,27 @@ export default function HomeScreen() {
                 onShare={handleShare}
                 onComment={handleComment}
                 onLike={(userId, idx) => {
+                  // Hinge style: Like removes user completely, never show again
+                  setFeedItems((prev) => prev.filter((item) => item.profile.id !== userId));
                   setUserProfiles((prev) => prev.filter((p) => p.id !== userId));
                   const matchName = profile.first_name;
                   const matchPhoto = profile.photos?.[0];
                   const pro = profile;
-                  const restoreIdx = typeof idx === 'number' ? idx : 0;
+                  const restoreIdx = typeof idx === 'number' ? idx : index;
+                  
                   (async () => {
                     const [canLike, limitCheck] = await Promise.all([canLikeUser(), checkMatchLimit()]);
                     if (!canLike.canLike) {
+                      // Restore user if like limit reached
+                      const restoredItem = feedItems.find(item => item.profile.id === pro.id);
+                      if (restoredItem) {
+                        setFeedItems((prev) => {
+                          if (prev.some((item) => item.profile.id === pro.id)) return prev;
+                          const c = [...prev];
+                          c.splice(Math.min(restoreIdx, c.length), 0, restoredItem);
+                          return c;
+                        });
+                      }
                       setUserProfiles((prev) => {
                         if (prev.some((p) => p.id === pro.id)) return prev;
                         const c = [...prev];
@@ -540,6 +757,16 @@ export default function HomeScreen() {
                       return;
                     }
                     if (limitCheck.reached) {
+                      // Restore user if match limit reached
+                      const restoredItem = feedItems.find(item => item.profile.id === pro.id);
+                      if (restoredItem) {
+                        setFeedItems((prev) => {
+                          if (prev.some((item) => item.profile.id === pro.id)) return prev;
+                          const c = [...prev];
+                          c.splice(Math.min(restoreIdx, c.length), 0, restoredItem);
+                          return c;
+                        });
+                      }
                       setUserProfiles((prev) => {
                         if (prev.some((p) => p.id === pro.id)) return prev;
                         const c = [...prev];
@@ -551,8 +778,25 @@ export default function HomeScreen() {
                       return;
                     }
                     const likeResult = await likeUser(userId);
-                    if (likeResult.error) return;
+                    if (likeResult.error) {
+                      // Restore user on error
+                      const restoredItem = feedItems.find(item => item.profile.id === pro.id);
+                      if (restoredItem) {
+                        setFeedItems((prev) => {
+                          const c = [...prev];
+                          c.splice(Math.min(restoreIdx, c.length), 0, restoredItem);
+                          return c;
+                        });
+                      }
+                      setUserProfiles((prev) => {
+                        const c = [...prev];
+                        c.splice(Math.min(restoreIdx, c.length), 0, pro);
+                        return c;
+                      });
+                      return;
+                    }
                     updateLikeCount();
+                    // Mark user as seen - they will never appear again
                     recordProfileView(userId).catch(() => {});
                     const { data: { session } } = await supabase.auth.getSession();
                     if (session?.user) {
@@ -565,8 +809,18 @@ export default function HomeScreen() {
                     }
                   })();
                 }}
-                onPass={(userId) => setUserProfiles((prev) => prev.filter((p) => p.id !== userId))}
-                onBlock={(userId) => setUserProfiles((prev) => prev.filter((p) => p.id !== userId))}
+                onPass={(userId) => {
+                  // Hinge style: Pass removes user completely, never show again
+                  setFeedItems((prev) => prev.filter((item) => item.profile.id !== userId));
+                  setUserProfiles((prev) => prev.filter((p) => p.id !== userId));
+                  // Mark user as seen (will be handled by recordProfileView in like, but for pass we should also mark)
+                  recordProfileView(userId).catch(() => {});
+                }}
+                onBlock={(userId) => {
+                  // Block removes user completely
+                  setFeedItems((prev) => prev.filter((item) => item.profile.id !== userId));
+                  setUserProfiles((prev) => prev.filter((p) => p.id !== userId));
+                }}
               />
             );
           }}
@@ -579,7 +833,7 @@ export default function HomeScreen() {
             ) : null
           }
           onEndReached={() => {
-            if (userProfiles.length > 0 && hasMoreProfiles && !loadingMore && !filtersApplied) {
+            if (feedItems.length > 0 && hasMoreProfiles && !loadingMore && !filtersApplied) {
               loadMoreProfiles();
             }
           }}

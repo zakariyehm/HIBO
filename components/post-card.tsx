@@ -344,7 +344,7 @@ function PostCardBase({
           </View>
         )}
 
-        {/* Bio Section - Hinge Style */}
+        {/* Bio Section - Hinge Style (for prompt content blocks) */}
         {(bio || bio_title || postText) && (
           <View style={styles.bioContainer}>
             {bio_title && (
@@ -360,8 +360,8 @@ function PostCardBase({
           </View>
         )}
 
-        {/* Prompts Section - Hinge Style */}
-        {userPrompts && userPrompts.length > 0 && (
+        {/* Prompts Section - Hinge Style (only show if prompts array provided AND no bio_title to avoid duplication) */}
+        {userPrompts && userPrompts.length > 0 && !bio_title && (
           <View style={styles.promptsContainer}>
             {userPrompts.map((prompt, index) => (
               <View key={index} style={styles.promptCard}>
