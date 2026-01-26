@@ -2,8 +2,8 @@ import { Colors } from '@/constants/theme';
 import { Header } from '@/components/header';
 import { getUserMatches, isPremiumUser } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import { router, useFocusEffect } from 'expo-router';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Dimensions,
@@ -71,6 +71,13 @@ export default function MatchScreen() {
     fetchMatches();
     checkPremiumStatus();
   }, []);
+
+  // Refresh premium status when screen comes into focus (e.g., after subscription)
+  useFocusEffect(
+    useCallback(() => {
+      checkPremiumStatus();
+    }, [])
+  );
 
   const checkPremiumStatus = async () => {
     const premium = await isPremiumUser();

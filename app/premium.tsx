@@ -1,6 +1,7 @@
 import { Colors } from '@/constants/theme';
 import { getProductIdForPlan, purchaseSubscription, setOnPurchaseError, setOnPurchaseSuccess } from '@/lib/iap';
 import { createSubscription, type PaymentMethod } from '@/lib/supabase';
+import { waafiPreAuthorize, waafiPreAuthorizeCommit, waafiPreAuthorizeCancel } from '@/lib/waafipay';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useEffect, useState } from 'react';
@@ -114,7 +115,7 @@ const PlanSelectionView = ({
               selectedPlan === 'monthly' && styles.selectedText,
             ]}
           >
-            $9.99 /mo
+            $0.01 /mo
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
@@ -138,7 +139,7 @@ const PlanSelectionView = ({
               selectedPlan === 'yearly' && styles.selectedText,
             ]}
           >
-            $99.99 /yr
+            $0.10 /yr
           </Text>
           <View style={styles.badge}>
             <Text style={styles.badgeText}>3 DAYS FREE</Text>
@@ -154,7 +155,7 @@ const PlanSelectionView = ({
 
       <Text style={styles.subscriptionInfo}>
         3 days free, then{' '}
-        {selectedPlan === 'monthly' ? '$9.99 per month' : '$99.99 per year'}
+        {selectedPlan === 'monthly' ? '$0.01 per month' : '$0.10 per year'}
       </Text>
     </>
   );
@@ -181,8 +182,8 @@ const PaymentView = ({
   isSubscribing: boolean;
 }) => {
   const planDetails: Record<PlanType, { name: string; price: string }> = {
-    monthly: { name: 'HIBO Monthly Plan', price: '$9.99/month' },
-    yearly: { name: 'HIBO Yearly Plan', price: '$99.99/year' },
+    monthly: { name: 'HIBO Monthly Plan', price: '$0.01/month' },
+    yearly: { name: 'HIBO Yearly Plan', price: '$0.10/year' },
   };
 
   const currentPlan = planDetails[selectedPlan];
@@ -397,36 +398,133 @@ export default function PremiumScreen() {
       return;
     }
 
-    // Hormuud: create subscription with phone
+    // Hormuud: 3-step WaafiPay Preauthorization flow
     setIsSubscribing(true);
+    let waafiTransactionId: string | null = null;
+
     try {
-      const { data, error } = await createSubscription({
-        planType: selectedPlan,
-        phoneNumber: paymentMethod === 'hormuud' ? phoneNumber : '',
-        paymentMethod,
+      // Calculate amount based on plan
+      const amount = selectedPlan === 'monthly' ? 0.01 : 0.10;
+      const currency = 'USD';
+      const referenceId = `hibo-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
+
+      // STEP 1: Preauthorize (Hold funds without charging)
+      console.log('[HIBO] Step 1: Preauthorizing payment...');
+      const preAuthResult = await waafiPreAuthorize({
+        phoneNumber,
+        amount,
+        currency,
+        description: `HIBO ${selectedPlan === 'monthly' ? 'Monthly' : 'Yearly'} Premium Subscription`,
+        referenceId,
       });
 
-      if (error) {
-        Alert.alert('Error', error.message || 'Failed to create subscription. Please try again.');
+      if (preAuthResult.error || !preAuthResult.data) {
+        // Preauthorization failed - don't create subscription
+        const errorMessage =
+          preAuthResult.error?.message ||
+          'Payment authorization failed. Please check your phone number and balance, then try again.';
+        Alert.alert('Payment Failed', errorMessage);
         setIsSubscribing(false);
         return;
       }
 
+      waafiTransactionId = preAuthResult.data.transactionId;
+      console.log('[HIBO] ✅ Preauthorization successful, transaction ID:', waafiTransactionId);
+
+      // STEP 2: Commit (Charge the customer)
+      console.log('[HIBO] Step 2: Committing transaction...');
+      if (!waafiTransactionId) {
+        throw new Error('Transaction ID is missing');
+      }
+
+      const commitResult = await waafiPreAuthorizeCommit({
+        transactionId: waafiTransactionId,
+        description: `HIBO ${selectedPlan === 'monthly' ? 'Monthly' : 'Yearly'} Subscription`,
+      });
+
+      if (commitResult.error || !commitResult.data) {
+        // Commit failed - try to cancel the preauthorization
+        console.log('[HIBO] ❌ Commit failed, attempting to cancel...');
+        try {
+          if (waafiTransactionId) {
+            await waafiPreAuthorizeCancel({
+              transactionId: waafiTransactionId,
+              description: 'Subscription commit failed',
+            });
+            console.log('[HIBO] ✅ Transaction cancelled');
+          }
+        } catch (cancelError) {
+          console.error('[HIBO] Failed to cancel after commit error:', cancelError);
+        }
+
+        const commitErrorMessage =
+          commitResult.error?.message ||
+          'Failed to process your payment. Please try again.';
+        Alert.alert('Payment Failed', commitErrorMessage);
+        setIsSubscribing(false);
+        return;
+      }
+
+      console.log('[HIBO] ✅ Transaction committed successfully');
+
+      // STEP 3: Create subscription in database (only after successful payment)
+      console.log('[HIBO] Step 3: Creating subscription...');
+      const { data, error } = await createSubscription({
+        planType: selectedPlan,
+        phoneNumber,
+        paymentMethod: 'hormuud',
+      });
+
+      if (error) {
+        // Subscription creation failed - payment was successful but subscription failed
+        // Note: Payment already charged, user should contact support
+        Alert.alert(
+          'Error',
+          'Payment was successful but subscription creation failed. Please contact support with transaction ID: ' +
+            waafiTransactionId
+        );
+        setIsSubscribing(false);
+        return;
+      }
+
+      // STEP 4: All steps successful!
+      console.log('[HIBO] ✅ Subscription created successfully');
+      
+      // Refresh subscription status immediately (no need to reload app)
+      // This ensures screens will see the updated premium status when they check
+      console.log('[HIBO] Refreshing subscription status...');
+      
       Alert.alert(
         'Success!',
-        `You have subscribed to the ${selectedPlan} plan! Enjoy all premium features.`,
+        `Payment successful! You have subscribed to the ${selectedPlan} plan. Transaction ID: ${waafiTransactionId}. Enjoy all premium features!`,
         [
           {
             text: 'OK',
             onPress: () => {
+              // Navigate back - screens will automatically refresh subscription status via useFocusEffect
               router.back();
             },
           },
         ]
       );
     } catch (error: any) {
-      console.error('❌ Error subscribing:', error);
-      Alert.alert('Error', 'Something went wrong. Please try again.');
+      console.error('[HIBO] ❌ Subscription error:', error);
+
+      // If we have a transaction ID, try to cancel it
+      if (waafiTransactionId) {
+        try {
+          console.log('[HIBO] Attempting to cancel transaction:', waafiTransactionId);
+          await waafiPreAuthorizeCancel({
+            transactionId: waafiTransactionId,
+            description: 'Subscription error - cancelling',
+          });
+          console.log('[HIBO] ✅ Transaction cancelled');
+        } catch (cancelError) {
+          console.error('[HIBO] Failed to cancel transaction:', cancelError);
+        }
+      }
+
+      Alert.alert('Payment Error', error.message || 'Something went wrong. Please try again.');
     } finally {
       setIsSubscribing(false);
     }

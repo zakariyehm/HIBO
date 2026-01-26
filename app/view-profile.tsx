@@ -7,9 +7,9 @@ import { Toast } from '@/components/Toast';
 import { Colors } from '@/constants/theme';
 import { blockUser, checkForMatch, getCurrentUser, getUserPosts, getUserProfile, getUserPrompts, isPremiumUser, isUserBlocked, likeUser, passUser, Post, recordProfileView } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -89,6 +89,13 @@ export default function ViewProfileScreen() {
       setLoading(false);
     }
   }, [userId]);
+
+  // Refresh premium status when screen comes into focus (e.g., after subscription)
+  useFocusEffect(
+    useCallback(() => {
+      checkPremiumStatus();
+    }, [])
+  );
 
   const checkPremiumStatus = async () => {
     const premium = await isPremiumUser();

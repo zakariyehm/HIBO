@@ -2,8 +2,8 @@ import { Colors } from '@/constants/theme';
 import { Header } from '@/components/header';
 import { getReceivedLikes, isPremiumUser, likeUser, passUser } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import { router, useFocusEffect } from 'expo-router';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -48,6 +48,13 @@ export default function LikesScreen() {
     fetchReceivedLikes(false);
     checkPremiumStatus();
   }, []);
+
+  // Refresh premium status when screen comes into focus (e.g., after subscription)
+  useFocusEffect(
+    useCallback(() => {
+      checkPremiumStatus();
+    }, [])
+  );
 
   const fetchReceivedLikes = async (isRefresh = false) => {
     try {
