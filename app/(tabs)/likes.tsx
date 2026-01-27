@@ -1,5 +1,6 @@
 import { Colors } from '@/constants/theme';
 import { Header } from '@/components/header';
+import { PremiumUpgradeBottomSheet } from '@/components/PremiumUpgradeBottomSheet';
 import { getReceivedLikes, isPremiumUser, likeUser, passUser } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
@@ -8,7 +9,6 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
-  Modal,
   RefreshControl,
   StyleSheet,
   Text,
@@ -218,56 +218,11 @@ export default function LikesScreen() {
         />
       )}
 
-      {/* Premium Upgrade Modal */}
-      <Modal
+      {/* Premium Upgrade Bottom Sheet */}
+      <PremiumUpgradeBottomSheet
         visible={showPremiumModal}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowPremiumModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Ionicons name="star" size={32} color={Colors.primary} />
-              <Text style={styles.modalTitle}>Upgrade to Premium</Text>
-            </View>
-            <Text style={styles.modalText}>
-              Unlock who liked you and see their photos clearly!
-            </Text>
-            <View style={styles.premiumFeatures}>
-              <View style={styles.featureItem}>
-                <Ionicons name="checkmark-circle" size={20} color={Colors.green} />
-                <Text style={styles.featureText}>See who liked you</Text>
-              </View>
-              <View style={styles.featureItem}>
-                <Ionicons name="checkmark-circle" size={20} color={Colors.green} />
-                <Text style={styles.featureText}>Unblur all photos</Text>
-              </View>
-              <View style={styles.featureItem}>
-                <Ionicons name="checkmark-circle" size={20} color={Colors.green} />
-                <Text style={styles.featureText}>Unlimited likes</Text>
-              </View>
-            </View>
-            <TouchableOpacity
-              style={styles.upgradeButton}
-              onPress={() => {
-                setShowPremiumModal(false);
-                router.push('/premium');
-              }}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.upgradeButtonText}>Upgrade Now</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.cancelButton}
-              onPress={() => setShowPremiumModal(false)}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.cancelButtonText}>Maybe Later</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
+        onClose={() => setShowPremiumModal(false)}
+      />
     </View>
   );
 }
@@ -396,77 +351,6 @@ const styles = StyleSheet.create({
   },
   premiumIcon: {
     marginLeft: 8,
-  },
-  // Modal styles
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  modalContent: {
-    backgroundColor: Colors.cardBackground,
-    borderRadius: 24,
-    padding: 24,
-    width: '100%',
-    maxWidth: 400,
-    alignItems: 'center',
-  },
-  modalHeader: {
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  modalTitle: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: Colors.textDark,
-    marginTop: 12,
-  },
-  modalText: {
-    fontSize: 16,
-    color: Colors.textLight,
-    textAlign: 'center',
-    marginBottom: 24,
-    lineHeight: 24,
-  },
-  premiumFeatures: {
-    width: '100%',
-    gap: 12,
-    marginBottom: 24,
-  },
-  featureItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  featureText: {
-    fontSize: 16,
-    color: Colors.textDark,
-    fontWeight: '500',
-  },
-  upgradeButton: {
-    width: '100%',
-    backgroundColor: Colors.primary,
-    paddingVertical: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  upgradeButtonText: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: Colors.primaryText,
-  },
-  cancelButton: {
-    width: '100%',
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
-  cancelButtonText: {
-    fontSize: 16,
-    color: Colors.textLight,
-    fontWeight: '500',
   },
 });
 
