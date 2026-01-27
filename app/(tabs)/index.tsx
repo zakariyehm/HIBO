@@ -821,6 +821,7 @@ export default function HomeScreen() {
                   setFeedItems((prev) => prev.filter((item) => item.profile.id !== userId));
                   setUserProfiles((prev) => prev.filter((p) => p.id !== userId));
                 }}
+                remainingLikes={likeCount.remaining}
               />
             );
           }}

@@ -31,6 +31,7 @@ interface PostCardProps {
   onPass?: (userId: string) => void;
   onBlock?: (userId: string) => void;
   index?: number; // meeshii saxda ah (rollback haddii limit)
+  remainingLikes?: number; // daily likes left (for purple pill)
 }
 
 function PostCardBase({
@@ -56,6 +57,7 @@ function PostCardBase({
   onPass,
   onBlock,
   index,
+  remainingLikes,
 }: PostCardProps) {
   const { text: statusText, isOnline } = getUserStatus(lastActive);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
@@ -324,25 +326,38 @@ function PostCardBase({
               </View>
             )}
 
-            {/* Like & Pass overlay on image – Hibo colors (love / pass) */}
+            {/* Like overlay – center of image (flip: like on image, pass in bar) */}
             <View style={styles.imageOverlayButtons} pointerEvents={isProcessing ? 'none' : 'auto'}>
               <TouchableOpacity
-                style={[styles.imageOverlayBtn, { borderColor: Colors.pass }]}
-                onPress={handlePass}
-                disabled={isProcessing || !userId}
-              >
-                <Ionicons name="close" size={28} color={Colors.pass} />
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.imageOverlayBtn, { borderColor: Colors.love }]}
+                style={[styles.imageOverlayBtn, styles.imageOverlayBtnLike]}
                 onPress={handleLike}
                 disabled={isProcessing || !userId}
               >
-                <Ionicons name="heart-outline" size={28} color={Colors.love} />
+                <Ionicons name="thumbs-up-outline" size={28} color={Colors.textDark} />
               </TouchableOpacity>
             </View>
           </View>
         )}
+
+        {/* Pass (X) + Comment bar – between image and prompts */}
+        <View style={styles.sendLikeBar} pointerEvents={isProcessing ? 'none' : 'auto'}>
+          <TouchableOpacity
+            style={styles.sendLikeCountPill}
+            onPress={handlePass}
+            disabled={isProcessing || !userId}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="close" size={18} color={Colors.textDark} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.sendLikeButtonPill}
+            onPress={() => onComment?.()}
+            disabled={isProcessing || !userId}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.sendLikeButtonText}>Send Comment</Text>
+          </TouchableOpacity>
+        </View>
 
         {/* Bio Section - Hinge Style (for prompt content blocks) */}
         {(bio || bio_title || postText) && (
@@ -539,7 +554,7 @@ const styles = StyleSheet.create({
   },
   postImage: {
     width: SCREEN_WIDTH,
-    height: SCREEN_WIDTH * 1.2, // Taller aspect ratio (120% of width)
+    height: SCREEN_WIDTH * 1.1, // Aspect ratio 1.1
     resizeMode: 'cover',
     borderRadius: 8,
     borderWidth: 0.5,
@@ -602,6 +617,40 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.25,
     shadowRadius: 4,
     elevation: 4,
+  },
+  imageOverlayBtnLike: {
+    backgroundColor: '#E8DAEF',
+    borderColor: '#E8DAEF',
+  },
+  sendLikeBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 12,
+    paddingHorizontal: 4,
+  },
+  sendLikeCountPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    backgroundColor: '#E8DAEF',
+  },
+  sendLikeButtonPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 999,
+    backgroundColor: '#F4E4BC',
+  },
+  sendLikeButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: Colors.textDark,
   },
   bioContainer: {
     marginBottom: 12,
