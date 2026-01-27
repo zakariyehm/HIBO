@@ -842,9 +842,32 @@ AND (has_messaged = FALSE OR has_messaged IS NULL);
 ALTER PUBLICATION supabase_realtime ADD TABLE messages;
 
 -- ============================================================================
+-- 15. UPGRADE/MIGRATION SCRIPTS
+-- ============================================================================
+-- These scripts ensure backward compatibility and handle upgrades
+-- They are safe to run multiple times (idempotent)
+
+-- Ensure bio column exists (for existing databases)
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS bio TEXT;
+
+-- Update existing records to have empty string if bio is null
+UPDATE profiles SET bio = '' WHERE bio IS NULL;
+
+-- If you want to make bio NOT NULL for new records (after ensuring all existing records have values)
+-- Uncomment the line below:
+-- ALTER TABLE profiles ALTER COLUMN bio SET NOT NULL;
+
+-- Ensure bio_title column exists (for existing databases)
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS bio_title TEXT;
+
+-- ============================================================================
 -- COMPLETE!
 -- ============================================================================
 -- All database schemas, features, and fixes have been applied.
 -- Your HIBO dating app database is now fully configured!
+-- 
+-- NOTE: When creating new upgrade scripts (e.g., supabase-add-*.sql),
+-- make sure to also add them to this complete file in section 15 (UPGRADE/MIGRATION SCRIPTS)
+-- so that future fresh installations include all upgrades.
 -- ============================================================================
 
