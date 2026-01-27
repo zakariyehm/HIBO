@@ -528,7 +528,7 @@ const styles = StyleSheet.create({
   },
   imageContainer: {
     marginBottom: 12,
-    borderRadius: 16,
+    borderRadius: 8,
     overflow: 'hidden',
     position: 'relative',
     borderWidth: 0.5,
@@ -539,9 +539,9 @@ const styles = StyleSheet.create({
   },
   postImage: {
     width: SCREEN_WIDTH,
-    height: 500,
+    height: SCREEN_WIDTH * 1.2, // Taller aspect ratio (120% of width)
     resizeMode: 'cover',
-    borderRadius: 16,
+    borderRadius: 8,
     borderWidth: 0.5,
     borderColor: '#000000',
   },

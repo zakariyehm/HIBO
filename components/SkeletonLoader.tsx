@@ -42,7 +42,7 @@ const postCardStyles = StyleSheet.create({
   },
   imageContainer: {
     marginBottom: 12,
-    borderRadius: 16,
+    borderRadius: 8,
     overflow: 'hidden',
     position: 'relative',
     borderWidth: 0.5,
@@ -151,8 +151,8 @@ export function PostCardSkeleton() {
         <View style={postCardStyles.imageContainer}>
           <SkeletonLoader 
             width={SCREEN_WIDTH} 
-            height={500} 
-            borderRadius={16} 
+            height={SCREEN_WIDTH * 1.2} 
+            borderRadius={8} 
           />
         </View>
 
