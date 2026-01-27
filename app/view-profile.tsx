@@ -5,7 +5,7 @@
 import { MatchPopup } from '@/components/MatchPopup';
 import { Toast } from '@/components/Toast';
 import { Colors } from '@/constants/theme';
-import { blockUser, checkForMatch, getCurrentUser, getUserPosts, getUserProfile, getUserPrompts, isPremiumUser, isUserBlocked, likeUser, passUser, Post, recordProfileView } from '@/lib/supabase';
+import { blockUser, checkForMatch, getCurrentUser, getUserPosts, getUserProfile, getUserPrompts, isPremiumUser, isUserBlocked, likeUser, passUser, Post, recordProfileView, unmatchUser } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -55,7 +55,8 @@ interface UserProfile {
 
 export default function ViewProfileScreen() {
   const insets = useSafeAreaInsets();
-  const { userId } = useLocalSearchParams<{ userId: string }>();
+  const { userId, matchId } = useLocalSearchParams<{ userId: string; matchId?: string }>();
+  const fromMatch = !!matchId;
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [toastVisible, setToastVisible] = useState(false);
@@ -82,13 +83,13 @@ export default function ViewProfileScreen() {
       checkPremiumStatus();
       fetchProfile();
       fetchPosts();
-      // Record that this profile was viewed (like Tinder - once viewed, don't show again)
-      recordProfileView(userId);
+      // Skip profile view recording when viewing from Match tab (existing match)
+      if (!fromMatch) recordProfileView(userId);
     } else {
       showToast('User ID not provided', 'error');
       setLoading(false);
     }
-  }, [userId]);
+  }, [userId, fromMatch]);
 
   // Refresh premium status when screen comes into focus (e.g., after subscription)
   useFocusEffect(
@@ -366,6 +367,67 @@ export default function ViewProfileScreen() {
     }
   };
 
+  const handleUnmatch = () => {
+    if (!matchId || !userId || isProcessing) return;
+    const name = (profile && `${profile.first_name ?? ''} ${profile.last_name ?? ''}`.trim()) || 'this person';
+    Alert.alert(
+      'Unmatch',
+      `Unmatch with ${name}? You will lose your conversation.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Unmatch',
+          style: 'destructive',
+          onPress: async () => {
+            setIsProcessing(true);
+            const { error } = await unmatchUser(matchId);
+            setIsProcessing(false);
+            if (error) {
+              showToast(error.message || 'Failed to unmatch', 'error');
+              return;
+            }
+            showToast('Unmatched', 'success');
+            router.back();
+          },
+        },
+      ]
+    );
+  };
+
+  const handleDelete = () => {
+    if (!matchId || !userId || isProcessing) return;
+    const name = (profile && `${profile.first_name ?? ''} ${profile.last_name ?? ''}`.trim()) || 'this person';
+    Alert.alert(
+      'Delete match',
+      `Delete match and block ${name}? You will not see them again.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            setIsProcessing(true);
+            const [unmatchRes, blockRes] = await Promise.all([
+              unmatchUser(matchId),
+              blockUser(userId),
+            ]);
+            setIsProcessing(false);
+            if (unmatchRes.error) {
+              showToast(unmatchRes.error.message || 'Failed to unmatch', 'error');
+              return;
+            }
+            if (blockRes.error) {
+              showToast(blockRes.error.message || 'Failed to block', 'error');
+              return;
+            }
+            showToast('Match deleted', 'success');
+            router.back();
+          },
+        },
+      ]
+    );
+  };
+
   const fullName = `${profile.first_name || ''} ${profile.last_name || ''}`.trim();
   const photos = profile.photos && profile.photos.length > 0 ? profile.photos : [];
 
@@ -387,7 +449,12 @@ export default function ViewProfileScreen() {
 
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={[styles.contentContainer, { paddingBottom: Math.max(insets.bottom, 32) + 32 }]}
+        contentContainerStyle={[
+          styles.contentContainer,
+          {
+            paddingBottom: Math.max(insets.bottom, 32) + 32 + (!isCurrentUser && userId ? 72 : 0),
+          },
+        ]}
         showsVerticalScrollIndicator={false}
       >
         {/* Name Box - Purple Highlighted */}
@@ -600,6 +667,55 @@ export default function ViewProfileScreen() {
           </View>
         )}
       </ScrollView>
+
+      {/* Like + Pass (discover) OR Unmatch + Delete (viewing from Match tab) */}
+      {!isCurrentUser && userId && (
+        <View style={[styles.actionBar, { paddingBottom: Math.max(insets.bottom, 16) }]}>
+          {fromMatch ? (
+            <>
+              <TouchableOpacity
+                style={styles.actionBarUnmatchPill}
+                onPress={handleUnmatch}
+                disabled={isProcessing}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="heart-dislike-outline" size={20} color={Colors.textDark} />
+                <Text style={styles.actionBarUnmatchText}>Unmatch</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.actionBarDeletePill}
+                onPress={handleDelete}
+                disabled={isProcessing}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="trash-outline" size={20} color="#fff" />
+                <Text style={styles.actionBarDeleteText}>Delete</Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <>
+              <TouchableOpacity
+                style={styles.actionBarLikePill}
+                onPress={handleLike}
+                disabled={isProcessing}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="thumbs-up-outline" size={22} color={Colors.textDark} />
+                <Text style={styles.actionBarLikeText}>Like</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.actionBarPassPill}
+                onPress={handlePass}
+                disabled={isProcessing}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="close" size={20} color={Colors.textDark} />
+                <Text style={styles.actionBarPassText}>Pass</Text>
+              </TouchableOpacity>
+            </>
+          )}
+        </View>
+      )}
 
       <MatchPopup
         visible={showMatchPopup}
@@ -956,6 +1072,77 @@ const styles = StyleSheet.create({
     height: 16,
     borderRadius: 4,
     backgroundColor: Colors.borderLight,
+  },
+  actionBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    backgroundColor: white,
+    borderTopWidth: 1,
+    borderTopColor: Colors.borderLight,
+  },
+  actionBarLikePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 999,
+    backgroundColor: '#E8DAEF',
+  },
+  actionBarLikeText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: Colors.textDark,
+  },
+  actionBarPassPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 999,
+    backgroundColor: '#F4E4BC',
+  },
+  actionBarPassText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: Colors.textDark,
+  },
+  actionBarUnmatchPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 999,
+    backgroundColor: '#E2C1AE',
+  },
+  actionBarUnmatchText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: Colors.textDark,
+  },
+  actionBarDeletePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 999,
+    backgroundColor: '#C62828',
+  },
+  actionBarDeleteText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#fff',
   },
 });
 

@@ -142,8 +142,22 @@ export const signInWithEmail = async (email: string, password: string) => {
 };
 
 export const signOut = async () => {
-  const { error } = await supabase.auth.signOut();
-  return { error };
+  try {
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      if (error.message?.includes('Auth session missing') || error.name === 'AuthSessionMissingError') {
+        return { error: null };
+      }
+      return { error };
+    }
+    return { error: null };
+  } catch (e: any) {
+    if (e?.message?.includes('Auth session missing') || e?.name === 'AuthSessionMissingError') {
+      return { error: null };
+    }
+    console.error('❌ Logout error:', e);
+    return { error: e };
+  }
 };
 
 export const getCurrentUser = async () => {
@@ -946,6 +960,53 @@ export const getUserMatches = async () => {
   }
 };
 
+/** Get match between current user and partner. Returns matchId + userId for chat, or null. */
+export const getMatchWithUser = async (partnerId: string) => {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) return null;
+    const userId = session.user.id;
+    const { data: match, error } = await supabase
+      .from('matches')
+      .select('id')
+      .or(`and(user1_id.eq.${userId},user2_id.eq.${partnerId}),and(user1_id.eq.${partnerId},user2_id.eq.${userId})`)
+      .maybeSingle();
+    if (error || !match) return null;
+    return { matchId: match.id, userId: partnerId };
+  } catch (e) {
+    return null;
+  }
+};
+
+/** Unmatch: delete the match. Caller must be part of the match. Messages cascade-delete. */
+export const unmatchUser = async (matchId: string) => {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) {
+      return { data: null, error: { message: 'Not authenticated' } };
+    }
+    const userId = session.user.id;
+    const { data: match, error: fetchErr } = await supabase
+      .from('matches')
+      .select('id')
+      .eq('id', matchId)
+      .or(`user1_id.eq.${userId},user2_id.eq.${userId}`)
+      .maybeSingle();
+    if (fetchErr || !match) {
+      return { data: null, error: { message: 'Match not found or unauthorized' } };
+    }
+    const { error: delErr } = await supabase.from('matches').delete().eq('id', matchId);
+    if (delErr) {
+      console.error('❌ Error unmatching:', delErr);
+      return { data: null, error: delErr };
+    }
+    return { data: { success: true }, error: null };
+  } catch (e: any) {
+    console.error('❌ Exception in unmatchUser:', e);
+    return { data: null, error: { message: e?.message || 'Unmatch failed' } };
+  }
+};
+
 export const getUserLikes = async () => {
   try {
     const { data: { session } } = await supabase.auth.getSession();
@@ -1035,6 +1096,77 @@ export const getReceivedLikes = async () => {
   } catch (error: any) {
     console.error('❌ Exception in getReceivedLikes:', error);
     return { data: null, error };
+  }
+};
+
+// Save profile comment (from feed "Send Comment"); receiver sees in Likes tab
+export const saveProfileComment = async (receiverId: string, content: string) => {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) {
+      return { data: null, error: { message: 'Not authenticated' } };
+    }
+    const { data, error } = await supabase
+      .from('profile_comments')
+      .insert({
+        sender_id: session.user.id,
+        receiver_id: receiverId,
+        content: content.trim(),
+      })
+      .select('id, created_at')
+      .single();
+    if (error) {
+      console.error('❌ Error saving profile comment:', error);
+      return { data: null, error };
+    }
+    return { data, error: null };
+  } catch (e: any) {
+    console.error('❌ Exception in saveProfileComment:', e);
+    return { data: null, error: e };
+  }
+};
+
+// Get profile comments sent to current user (for Likes tab; premium to see who + message)
+export const getReceivedProfileComments = async () => {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) {
+      return { data: null, error: { message: 'Not authenticated' } };
+    }
+    const userId = session.user.id;
+    const { data: blockedUsers } = await getBlockedUsers();
+    const blockedIds = blockedUsers || [];
+
+    const { data: rows, error } = await supabase
+      .from('profile_comments')
+      .select('id, sender_id, content, created_at')
+      .eq('receiver_id', userId)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('❌ Error fetching profile comments:', error);
+      return { data: null, error };
+    }
+
+    const received = await Promise.all(
+      (rows || [])
+        .filter((r) => !blockedIds.includes(r.sender_id))
+        .map(async (r) => {
+          const { data: profile } = await getUserProfile(r.sender_id);
+          if (!profile) return null;
+          return {
+            ...profile,
+            comment_id: r.id,
+            comment_content: r.content,
+            commented_at: r.created_at,
+          };
+        })
+    );
+
+    return { data: received.filter(Boolean), error: null };
+  } catch (e: any) {
+    console.error('❌ Exception in getReceivedProfileComments:', e);
+    return { data: null, error: e };
   }
 };
 
@@ -1468,7 +1600,7 @@ export const sendMessage = async (
       .maybeSingle();
 
     if (matchError || !match) {
-      console.error('❌ Error verifying match:', matchError);
+      if (matchError) console.error('❌ Error verifying match:', matchError);
       return { data: null, error: { message: 'Match not found or unauthorized' } };
     }
 
@@ -1537,7 +1669,7 @@ export const getMessages = async (matchId: string) => {
       .maybeSingle();
 
     if (matchError || !match) {
-      console.error('❌ Error verifying match:', matchError);
+      if (matchError) console.error('❌ Error verifying match:', matchError);
       return { data: null, error: { message: 'Match not found or unauthorized' } };
     }
 
@@ -1696,7 +1828,7 @@ export const markMessagesAsRead = async (matchId: string) => {
       .maybeSingle();
 
     if (matchError || !match) {
-      console.error('❌ Error verifying match:', matchError);
+      if (matchError) console.error('❌ Error verifying match:', matchError);
       return { data: null, error: { message: 'Match not found or unauthorized' } };
     }
 
@@ -1745,13 +1877,15 @@ export const setTypingIndicator = async (matchId: string, isTyping: boolean) => 
       .single();
 
     if (error) {
-      console.error('❌ Error setting typing indicator:', error);
+      const isRls = error?.code === '42501' || (typeof error?.message === 'string' && error.message.includes('row-level security'));
+      if (!isRls) console.error('❌ Error setting typing indicator:', error);
       return { data: null, error };
     }
 
     return { data, error: null };
   } catch (error: any) {
-    console.error('❌ Exception in setTypingIndicator:', error);
+    const isRls = error?.code === '42501' || (typeof error?.message === 'string' && error?.message?.includes('row-level security'));
+    if (!isRls) console.error('❌ Exception in setTypingIndicator:', error);
     return { data: null, error };
   }
 };

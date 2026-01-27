@@ -130,6 +130,19 @@ ON daily_likes(user_id, liked_user_id, immutable_date(created_at));
 CREATE INDEX idx_daily_likes_user_date ON daily_likes(user_id, immutable_date(created_at));
 CREATE INDEX idx_daily_likes_created ON daily_likes(created_at);
 
+-- Profile comments: pre-match comments from feed (e.g. "Send Comment")
+-- Recipient sees them in Likes tab; premium to see who commented + message.
+CREATE TABLE IF NOT EXISTS profile_comments (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  sender_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  receiver_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  content TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_profile_comments_receiver ON profile_comments(receiver_id);
+CREATE INDEX IF NOT EXISTS idx_profile_comments_sender ON profile_comments(sender_id);
+CREATE INDEX IF NOT EXISTS idx_profile_comments_created ON profile_comments(created_at DESC);
+
 -- ============================================================================
 -- 4. MESSAGES SCHEMA
 -- ============================================================================
@@ -310,6 +323,7 @@ ALTER TABLE blocks ENABLE ROW LEVEL SECURITY;
 ALTER TABLE profile_views ENABLE ROW LEVEL SECURITY;
 ALTER TABLE daily_likes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE typing_indicators ENABLE ROW LEVEL SECURITY;
+ALTER TABLE profile_comments ENABLE ROW LEVEL SECURITY;
 -- Storage RLS is managed by Supabase automatically, no need to enable manually
 
 -- Drop existing policies on profiles
@@ -373,6 +387,7 @@ USING (auth.uid() = liker_id);
 -- Matches policies
 DROP POLICY IF EXISTS "Users can view their own matches" ON matches;
 DROP POLICY IF EXISTS "Allow match creation via trigger" ON matches;
+DROP POLICY IF EXISTS "Users can delete their own matches" ON matches;
 
 CREATE POLICY "Users can view their own matches"
 ON matches FOR SELECT
@@ -385,6 +400,11 @@ TO authenticated
 WITH CHECK (
   auth.uid() = user1_id OR auth.uid() = user2_id
 );
+
+CREATE POLICY "Users can delete their own matches"
+ON matches FOR DELETE
+TO authenticated
+USING (auth.uid() = user1_id OR auth.uid() = user2_id);
 
 -- Messages policies
 DROP POLICY IF EXISTS "Users can view their own messages" ON messages;
@@ -529,6 +549,20 @@ CREATE POLICY "Users can insert their own daily likes"
 ON daily_likes FOR INSERT
 TO authenticated
 WITH CHECK (auth.uid() = user_id);
+
+-- Profile comments policies
+DROP POLICY IF EXISTS "Users can view received profile comments" ON profile_comments;
+DROP POLICY IF EXISTS "Users can insert profile comments" ON profile_comments;
+
+CREATE POLICY "Users can view received profile comments"
+ON profile_comments FOR SELECT
+TO authenticated
+USING (auth.uid() = receiver_id OR auth.uid() = sender_id);
+
+CREATE POLICY "Users can insert profile comments"
+ON profile_comments FOR INSERT
+TO authenticated
+WITH CHECK (auth.uid() = sender_id);
 
 -- Typing indicators policies
 DROP POLICY IF EXISTS "Users can view typing indicators for their matches" ON typing_indicators;

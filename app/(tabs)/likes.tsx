@@ -1,21 +1,23 @@
-import { Colors } from '@/constants/theme';
 import { Header } from '@/components/header';
 import { PremiumUpgradeBottomSheet } from '@/components/PremiumUpgradeBottomSheet';
-import { getReceivedLikes, isPremiumUser, likeUser, passUser } from '@/lib/supabase';
+import { Colors } from '@/constants/theme';
+import { getMatchWithUser, getReceivedLikes, getReceivedProfileComments, isPremiumUser, likeUser, passUser } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
+import { BlurView } from 'expo-blur';
+import { Image as ExpoImage } from 'expo-image';
 import { router, useFocusEffect } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
   FlatList,
+  Modal,
   RefreshControl,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native';
-import { Image as ExpoImage } from 'expo-image';
 
 function dedupById<T extends { id: string }>(arr: T[]): T[] {
   const seen = new Set<string>();
@@ -36,38 +38,83 @@ interface ReceivedLike {
   liked_at: string;
 }
 
+interface ReceivedComment {
+  id: string;
+  first_name: string;
+  last_name: string;
+  photos: string[];
+  age?: number;
+  location?: string;
+  comment_id: string;
+  comment_content: string;
+  commented_at: string;
+}
+
+type LikeOrComment = 
+  | { type: 'like'; id: string; userId: string; at: string; first_name: string; last_name: string; photos: string[]; age?: number; location?: string }
+  | { type: 'comment'; id: string; userId: string; at: string; first_name: string; last_name: string; photos: string[]; age?: number; location?: string; comment_content: string };
+
 export default function LikesScreen() {
-  const [receivedLikes, setReceivedLikes] = useState<ReceivedLike[]>([]);
+  const [items, setItems] = useState<LikeOrComment[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [isPremium, setIsPremium] = useState(false);
   const [showPremiumModal, setShowPremiumModal] = useState(false);
   const [processing, setProcessing] = useState<string | null>(null);
+  const [showCommentModal, setShowCommentModal] = useState(false);
+  const [selectedComment, setSelectedComment] = useState<{ userId: string; fullName: string; comment_content: string } | null>(null);
 
   useEffect(() => {
-    fetchReceivedLikes(false);
+    fetchItems(false);
     checkPremiumStatus();
   }, []);
 
-  // Refresh premium status when screen comes into focus (e.g., after subscription)
   useFocusEffect(
     useCallback(() => {
       checkPremiumStatus();
     }, [])
   );
 
-  const fetchReceivedLikes = async (isRefresh = false) => {
+  const fetchItems = async (isRefresh = false) => {
     try {
       if (isRefresh) setRefreshing(true);
       else setLoading(true);
-      const { data, error } = await getReceivedLikes();
-      if (error) {
-        console.error('❌ Error fetching received likes:', error);
-        return;
-      }
-      if (data) setReceivedLikes(dedupById(data as ReceivedLike[]));
+      const [likesRes, commentsRes] = await Promise.all([
+        getReceivedLikes(),
+        getReceivedProfileComments(),
+      ]);
+
+      const likes: LikeOrComment[] = (dedupById((likesRes.data || []) as ReceivedLike[])).map((l) => ({
+        type: 'like' as const,
+        id: `like-${l.id}`,
+        userId: l.id,
+        at: l.liked_at,
+        first_name: l.first_name,
+        last_name: l.last_name,
+        photos: l.photos || [],
+        age: l.age,
+        location: l.location,
+      }));
+
+      const comments: LikeOrComment[] = ((commentsRes.data || []) as ReceivedComment[]).map((c) => ({
+        type: 'comment' as const,
+        id: `comment-${c.comment_id}`,
+        userId: c.id,
+        at: c.commented_at,
+        first_name: c.first_name,
+        last_name: c.last_name,
+        photos: c.photos || [],
+        age: c.age,
+        location: c.location,
+        comment_content: c.comment_content,
+      }));
+
+      const merged = [...likes, ...comments].sort(
+        (a, b) => new Date(b.at).getTime() - new Date(a.at).getTime()
+      );
+      setItems(merged);
     } catch (e) {
-      console.error('❌ Exception in fetchReceivedLikes:', e);
+      console.error('❌ Exception fetching likes/comments:', e);
     } finally {
       if (isRefresh) setRefreshing(false);
       else setLoading(false);
@@ -79,22 +126,37 @@ export default function LikesScreen() {
     setIsPremium(premium);
   };
 
+  const getLikeErrorMessage = (err: { message?: string }) => {
+    const m = err?.message;
+    if (m === 'DAILY_LIKE_LIMIT_REACHED') return "You've used your daily likes. Come back tomorrow or upgrade to Premium for more.";
+    if (m === 'ALREADY_LIKED_TODAY') return "You already liked them today.";
+    if (m === 'MATCH_LIMIT_REACHED') return "Match limit reached. Upgrade to Premium for unlimited matches.";
+    if (m === 'Not authenticated') return "Please sign in again.";
+    return 'Couldn\'t send like. Please try again.';
+  };
+
   const handleLike = (userId: string) => {
     if (processing) return;
     setProcessing(userId);
-    const like = receivedLikes.find((l) => l.id === userId);
-    setReceivedLikes((prev) => prev.filter((l) => l.id !== userId));
+    const kept = items.filter((x) => x.userId !== userId);
+    setItems(kept);
     (async () => {
       try {
         const { data, error } = await likeUser(userId);
         if (error) {
-          if (like) setReceivedLikes((prev) => (prev.some((l) => l.id === like.id) ? prev : [...prev, like]));
-          Alert.alert('Error', 'Failed to like user');
+          fetchItems(true);
+          const msg = getLikeErrorMessage(error);
+          if (msg === 'Couldn\'t send like. Please try again.') {
+            console.error('❌ likeUser error:', error);
+          }
+          Alert.alert('Couldn\'t send like', msg);
           return;
         }
         if (data?.match) router.push({ pathname: '/(tabs)/match' });
       } catch (e) {
         console.error('❌ Error liking user:', e);
+        fetchItems(true);
+        Alert.alert('Couldn\'t send like', 'Something went wrong. Please try again.');
       } finally {
         setProcessing(null);
       }
@@ -104,7 +166,7 @@ export default function LikesScreen() {
   const handlePass = (userId: string) => {
     if (processing) return;
     setProcessing(userId);
-    setReceivedLikes((prev) => prev.filter((like) => like.id !== userId));
+    setItems((prev) => prev.filter((x) => x.userId !== userId));
     (async () => {
       try {
         await passUser(userId);
@@ -127,6 +189,20 @@ export default function LikesScreen() {
     });
   };
 
+  const handleItemPress = (item: LikeOrComment) => {
+    if (item.type === 'comment') {
+      if (isPremium) {
+        const fullName = `${item.first_name}${item.last_name ? ` ${item.last_name}` : ''}`.trim();
+        setSelectedComment({ userId: item.userId, fullName: fullName || 'Someone', comment_content: item.comment_content });
+        setShowCommentModal(true);
+      } else {
+        setShowPremiumModal(true);
+      }
+    } else {
+      handleViewProfile(item.userId);
+    }
+  };
+
   const getTimeAgo = (dateString: string) => {
     const date = new Date(dateString);
     const now = new Date();
@@ -146,31 +222,41 @@ export default function LikesScreen() {
       {loading ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={Colors.primary} />
-          <Text style={styles.loadingText}>Loading likes...</Text>
+          <Text style={styles.loadingText}>Loading likes & comments...</Text>
         </View>
-      ) : receivedLikes.length === 0 ? (
+      ) : items.length === 0 ? (
         <View style={styles.emptyContainer}>
           <View style={styles.emptyIconContainer}>
             <Ionicons name="heart-outline" size={64} color={Colors.textLight} />
           </View>
-          <Text style={styles.emptyTitle}>No likes yet</Text>
+          <Text style={styles.emptyTitle}>No likes or comments yet</Text>
           <Text style={styles.emptySubtitle}>
-            Start swiping to get likes! 💕
+            Start swiping and sending comments! 💕
           </Text>
         </View>
       ) : (
         <FlatList
-          data={receivedLikes}
+          data={items}
           keyExtractor={(item) => item.id}
-          renderItem={({ item: like }) => {
-            const mainPhoto = like.photos?.length ? like.photos[0] : null;
-            const statusMessage = isPremium ? `Liked you ${getTimeAgo(like.liked_at)}` : 'Liked you • Premium to see';
+          renderItem={({ item }) => {
+            const mainPhoto = item.photos?.length ? item.photos[0] : null;
+            const isComment = item.type === 'comment';
+            const preview = item.type === 'comment'
+              ? (item.comment_content.length > 40 ? `${item.comment_content.slice(0, 40)}…` : item.comment_content)
+              : '';
+            const statusMessage = isPremium
+              ? isComment
+                ? `Commented: "${preview}" ${getTimeAgo(item.at)}`
+                : `Liked you ${getTimeAgo(item.at)}`
+              : isComment
+                ? 'Someone commented • Premium to see'
+                : 'Liked you • Premium to see';
             return (
               <TouchableOpacity
                 style={styles.likeItem}
-                onPress={() => handleViewProfile(like.id)}
+                onPress={() => handleItemPress(item)}
                 activeOpacity={0.7}
-                disabled={processing === like.id}
+                disabled={processing === item.userId}
               >
                 <View style={styles.photoContainer}>
                   {mainPhoto ? (
@@ -192,7 +278,9 @@ export default function LikesScreen() {
                   )}
                 </View>
                 <View style={styles.likeInfo}>
-                  <Text style={styles.likeName} numberOfLines={1}>{like.first_name}</Text>
+                  <Text style={styles.likeName} numberOfLines={1}>
+                    {isPremium ? `${item.first_name}${item.last_name ? ` ${item.last_name}` : ''}` : 'Someone'}
+                  </Text>
                   <Text style={styles.statusMessage} numberOfLines={1}>{statusMessage}</Text>
                 </View>
                 {!isPremium && (
@@ -210,7 +298,7 @@ export default function LikesScreen() {
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
-              onRefresh={() => fetchReceivedLikes(true)}
+              onRefresh={() => fetchItems(true)}
               tintColor={Colors.primary}
               colors={[Colors.primary]}
             />
@@ -218,11 +306,79 @@ export default function LikesScreen() {
         />
       )}
 
-      {/* Premium Upgrade Bottom Sheet */}
+      {/* Premium Upgrade Bottom Sheet – likes & comments as premium */}
       <PremiumUpgradeBottomSheet
         visible={showPremiumModal}
         onClose={() => setShowPremiumModal(false)}
+        title="Upgrade to Premium"
+        description="See who liked you and who commented! Unlock photos and messages."
+        features={[
+          { icon: 'checkmark-circle', text: 'See who liked you' },
+          { icon: 'checkmark-circle', text: 'See who commented & read messages' },
+          { icon: 'checkmark-circle', text: 'Unblur all photos' },
+          { icon: 'checkmark-circle', text: 'Unlimited likes' },
+        ]}
       />
+
+      {/* Comment popup – blur overlay, title, comment, SEND LIKE */}
+      <Modal
+        visible={showCommentModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => { setShowCommentModal(false); setSelectedComment(null); }}
+      >
+        <View style={styles.commentModalOverlay}>
+          <BlurView intensity={80} tint="dark" style={StyleSheet.absoluteFillObject} />
+          <View style={[StyleSheet.absoluteFillObject, styles.commentModalOverlayDim]} />
+          <TouchableOpacity
+            style={StyleSheet.absoluteFillObject}
+            activeOpacity={1}
+            onPress={() => { setShowCommentModal(false); setSelectedComment(null); }}
+          />
+          <TouchableOpacity style={styles.commentModalCard} activeOpacity={1} onPress={(e) => e.stopPropagation()}>
+            {selectedComment && (
+              <>
+                <Text style={styles.commentModalTitle}>{selectedComment.fullName}</Text>
+                <Text style={styles.commentModalLabel}>Comment</Text>
+                <Text style={styles.commentModalText}>{selectedComment.comment_content}</Text>
+                <View style={styles.commentModalActions}>
+                  <TouchableOpacity
+                    style={styles.commentModalLikePill}
+                    onPress={() => {
+                      const uid = selectedComment.userId;
+                      setShowCommentModal(false);
+                      setSelectedComment(null);
+                      handleLike(uid);
+                    }}
+                    disabled={processing === selectedComment.userId}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons name="thumbs-up-outline" size={20} color={Colors.textDark} />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.commentModalStartMatchPill}
+                    onPress={async () => {
+                      const uid = selectedComment.userId;
+                      const match = await getMatchWithUser(uid);
+                      setShowCommentModal(false);
+                      setSelectedComment(null);
+                      if (match) {
+                        router.push({ pathname: '/chat', params: { matchId: match.matchId, userId: match.userId } });
+                      } else {
+                        Alert.alert('Match first', 'Like them back to match, then you can start chatting.');
+                      }
+                    }}
+                    disabled={processing === selectedComment.userId}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.commentModalStartMatchPillText}>Start chat</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
+          </TouchableOpacity>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -351,6 +507,71 @@ const styles = StyleSheet.create({
   },
   premiumIcon: {
     marginLeft: 8,
+  },
+  commentModalOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+    overflow: 'hidden',
+  },
+  commentModalOverlayDim: {
+    backgroundColor: 'rgba(0,0,0,0.25)',
+  },
+  commentModalCard: {
+    backgroundColor: Colors.cardBackground,
+    borderRadius: 8,
+    padding: 24,
+    width: '100%',
+    maxWidth: 400,
+  },
+  commentModalTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: Colors.textDark,
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  commentModalLabel: {
+    fontSize: 12,
+    color: Colors.textLight,
+    marginBottom: 6,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  commentModalText: {
+    fontSize: 16,
+    color: Colors.textDark,
+    lineHeight: 24,
+    marginBottom: 24,
+  },
+  commentModalActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  commentModalLikePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    backgroundColor: '#E8DAEF',
+  },
+  commentModalStartMatchPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 999,
+    backgroundColor: '#F4E4BC',
+  },
+  commentModalStartMatchPillText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: Colors.textDark,
   },
 });
 

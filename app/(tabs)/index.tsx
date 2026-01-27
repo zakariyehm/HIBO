@@ -1,9 +1,10 @@
 import { AppHeader } from '@/components/app-header';
 import { MatchPopup } from '@/components/MatchPopup';
 import { PostCard } from '@/components/post-card';
+import { Toast } from '@/components/Toast';
 import { PostCardSkeleton } from '@/components/SkeletonLoader';
 import { Colors } from '@/constants/theme';
-import { canLikeUser, checkForMatch, checkMatchLimit, getAllUserProfiles, getCurrentUser, getDailyLikeCount, getUserProfile, getUserPrompts, getUserProfilesPaginated, isPremiumUser, likeUser, recordProfileView, supabase, updateLastActive } from '@/lib/supabase';
+import { canLikeUser, checkForMatch, checkMatchLimit, getAllUserProfiles, getCurrentUser, getDailyLikeCount, getUserProfile, getUserPrompts, getUserProfilesPaginated, isPremiumUser, likeUser, recordProfileView, saveProfileComment, supabase, updateLastActive } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
@@ -210,6 +211,15 @@ export default function HomeScreen() {
   const [showMatchPopup, setShowMatchPopup] = useState(false);
   const [matchedUserName, setMatchedUserName] = useState('');
   const [matchedUserPhoto, setMatchedUserPhoto] = useState<string | undefined>(undefined);
+  const [toastVisible, setToastVisible] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
+  const [toastType, setToastType] = useState<'info' | 'error' | 'success'>('success');
+
+  const showToast = (message: string, type: 'info' | 'error' | 'success' = 'success') => {
+    setToastMessage(message);
+    setToastType(type);
+    setToastVisible(true);
+  };
 
   const appState = useRef(AppState.currentState);
   const currentUserInterestRef = useRef<string | null>(null);
@@ -597,8 +607,18 @@ export default function HomeScreen() {
     // console.log('Share pressed');
   };
 
-  const handleComment = () => {
-    // console.log('Comment pressed');
+  const handleComment = async (comment: string, userId?: string) => {
+    if (!comment.trim()) return;
+    if (!userId) {
+      showToast('Could not send comment', 'error');
+      return;
+    }
+    const { error } = await saveProfileComment(userId, comment);
+    if (error) {
+      showToast('Failed to send comment', 'error');
+      return;
+    }
+    showToast('Comment sent', 'success');
   };
 
   // Calculate time ago
@@ -1286,6 +1306,13 @@ export default function HomeScreen() {
         matchedUserPhoto={matchedUserPhoto}
         onClose={() => setShowMatchPopup(false)}
         onViewMatch={() => setShowMatchPopup(false)}
+      />
+
+      <Toast
+        visible={toastVisible}
+        message={toastMessage}
+        type={toastType}
+        onClose={() => setToastVisible(false)}
       />
     </View>
   );

@@ -4,7 +4,7 @@ import { blockUser, checkForMatch, getUserPrompts, getUserStatus, likeUser, pass
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useEffect, useState } from 'react';
-import { Alert, Dimensions, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Dimensions, Image, Keyboard, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -26,7 +26,7 @@ interface PostCardProps {
   commentCount?: number;
   userId?: string; // User ID for profile navigation
   onShare?: () => void;
-  onComment?: () => void;
+  onComment?: (comment: string, userId?: string) => void;
   onLike?: (userId: string, index?: number) => Promise<void> | void;
   onPass?: (userId: string) => void;
   onBlock?: (userId: string) => void;
@@ -65,6 +65,8 @@ function PostCardBase({
   const [isProcessing, setIsProcessing] = useState(false); // Single state for both actions
   const [showMatchPopup, setShowMatchPopup] = useState(false);
   const [userPrompts, setUserPrompts] = useState<Array<{ question: string; answer: string }>>(prompts || []);
+  const [showCommentInput, setShowCommentInput] = useState(false);
+  const [commentText, setCommentText] = useState('');
 
   // Fetch prompts if userId provided and prompts not passed
   useEffect(() => {
@@ -339,25 +341,66 @@ function PostCardBase({
           </View>
         )}
 
-        {/* Pass (X) + Comment bar – between image and prompts */}
-        <View style={styles.sendLikeBar} pointerEvents={isProcessing ? 'none' : 'auto'}>
-          <TouchableOpacity
-            style={styles.sendLikeCountPill}
-            onPress={handlePass}
-            disabled={isProcessing || !userId}
-            activeOpacity={0.7}
-          >
-            <Ionicons name="close" size={18} color={Colors.textDark} />
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.sendLikeButtonPill}
-            onPress={() => onComment?.()}
-            disabled={isProcessing || !userId}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.sendLikeButtonText}>Send Comment</Text>
-          </TouchableOpacity>
-        </View>
+        {/* Pass (X) + Send Comment bar – hide when typing; same spot shows text field */}
+        {!showCommentInput ? (
+          <View style={styles.sendLikeBar} pointerEvents={isProcessing ? 'none' : 'auto'}>
+            <TouchableOpacity
+              style={styles.sendLikeCountPill}
+              onPress={handlePass}
+              disabled={isProcessing || !userId}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="close" size={18} color={Colors.textDark} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.sendLikeButtonPill}
+              onPress={() => setShowCommentInput(true)}
+              disabled={isProcessing || !userId}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.sendLikeButtonText}>Send Comment</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <View style={styles.commentInputRow}>
+            <TextInput
+              style={styles.commentInput}
+              placeholder="Write a comment…"
+              placeholderTextColor={Colors.textLight}
+              value={commentText}
+              onChangeText={setCommentText}
+              multiline
+              maxLength={500}
+              autoFocus
+            />
+            <View style={styles.commentInputActions}>
+              <TouchableOpacity
+                style={styles.commentInputCancel}
+                onPress={() => {
+                  setShowCommentInput(false);
+                  setCommentText('');
+                  Keyboard.dismiss();
+                }}
+              >
+                <Text style={styles.commentInputCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.commentInputSend, !commentText.trim() && styles.commentInputSendDisabled]}
+                onPress={() => {
+                  const text = commentText.trim();
+                  if (!text) return;
+                  onComment?.(text, userId);
+                  setCommentText('');
+                  setShowCommentInput(false);
+                  Keyboard.dismiss();
+                }}
+                disabled={!commentText.trim()}
+              >
+                <Text style={styles.commentInputSendText}>Send</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
 
         {/* Bio Section - Hinge Style (for prompt content blocks) */}
         {(bio || bio_title || postText) && (
@@ -648,6 +691,51 @@ const styles = StyleSheet.create({
     backgroundColor: '#F4E4BC',
   },
   sendLikeButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: Colors.textDark,
+  },
+  commentInputRow: {
+    marginBottom: 12,
+    paddingHorizontal: 4,
+    gap: 8,
+  },
+  commentInput: {
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 15,
+    color: Colors.textDark,
+    minHeight: 88,
+    textAlignVertical: 'top',
+  },
+  commentInputActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    gap: 10,
+  },
+  commentInputCancel: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+  },
+  commentInputCancelText: {
+    fontSize: 15,
+    color: Colors.textLight,
+    fontWeight: '500',
+  },
+  commentInputSend: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 999,
+    backgroundColor: '#F4E4BC',
+  },
+  commentInputSendDisabled: {
+    opacity: 0.5,
+  },
+  commentInputSendText: {
     fontSize: 15,
     fontWeight: '600',
     color: Colors.textDark,

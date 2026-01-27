@@ -51,14 +51,19 @@ export default function ChatScreen() {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [isTyping, setIsTyping] = useState(false);
   const [partnerTyping, setPartnerTyping] = useState(false);
+  const [conversationEnded, setConversationEnded] = useState(false);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const typingCheckIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  const isMatchNotFound = (e: { message?: string } | null) =>
+    e?.message === 'Match not found or unauthorized';
+
   useEffect(() => {
     if (matchId && userId) {
-      setIsInitialLoad(true); // Reset for new chat
-      setMessages([]); // Clear previous messages
-      fetchMessages(true); // Show loading on initial load
+      setConversationEnded(false);
+      setIsInitialLoad(true);
+      setMessages([]);
+      fetchMessages(true);
       fetchPartnerProfile();
     }
   }, [matchId, userId]);
@@ -181,27 +186,21 @@ export default function ChatScreen() {
         clearTimeout(typingTimeoutRef.current);
       }
     };
-  }, [matchId, currentUserId, userId]);
+  }, [matchId, currentUserId, userId, conversationEnded]);
 
   // Refresh messages silently when screen comes into focus (like WhatsApp/Telegram)
   useFocusEffect(
     React.useCallback(() => {
-      if (matchId && userId) {
-        // Only refresh silently if we already have messages (not initial load)
-        if (!isInitialLoad && messages.length > 0) {
-          fetchMessages(false); // Silent refresh, no loading
-        }
-        markMessagesAsRead(matchId);
-      }
-    }, [matchId, userId, isInitialLoad, messages.length])
+      if (!matchId || !userId || conversationEnded) return;
+      if (!isInitialLoad && messages.length > 0) fetchMessages(false);
+      markMessagesAsRead(matchId);
+    }, [matchId, userId, isInitialLoad, messages.length, conversationEnded])
   );
 
   useEffect(() => {
-    // Mark messages as read when screen is focused
-    if (matchId && messages.length > 0) {
-      markMessagesAsRead(matchId);
-    }
-  }, [matchId, messages]);
+    if (conversationEnded || !matchId || messages.length === 0) return;
+    markMessagesAsRead(matchId);
+  }, [matchId, messages, conversationEnded]);
 
   useEffect(() => {
     // Scroll to bottom when new messages arrive
@@ -259,53 +258,40 @@ export default function ChatScreen() {
   const fetchMessages = async (showLoading: boolean = false) => {
     if (!matchId) return;
     try {
-      if (showLoading) {
-        setLoading(true);
-      }
-      
+      if (showLoading) setLoading(true);
       const { data, error } = await getMessages(matchId);
 
       if (error) {
-        console.error('❌ Error fetching messages:', error);
-        if (showLoading) {
-          setLoading(false);
+        if (isMatchNotFound(error)) {
+          setConversationEnded(true);
+        } else {
+          console.error('❌ Error fetching messages:', error);
         }
+        if (showLoading) setLoading(false);
         return;
       }
 
       if (data) {
         setMessages(data);
-        if (isInitialLoad) {
-          setIsInitialLoad(false);
-        }
+        if (isInitialLoad) setIsInitialLoad(false);
       }
-
-      if (showLoading) {
-        setLoading(false);
-      }
+      if (showLoading) setLoading(false);
     } catch (error) {
       console.error('❌ Error in fetchMessages:', error);
-      if (showLoading) {
-        setLoading(false);
-      }
+      if (showLoading) setLoading(false);
     }
   };
 
   const handleSendMessage = async (gifUrl?: string) => {
     const content = gifUrl || messageText.trim();
-    if (!content || !matchId || !userId || sending) return;
+    if (!content || !matchId || !userId || sending || conversationEnded) return;
 
     const messageType = gifUrl ? 'gif' : 'text';
     setMessageText('');
     setSending(true);
     setIsTyping(false);
-    
-    // Stop typing indicator
-    if (matchId) {
-      await setTypingIndicator(matchId, false);
-    }
+    if (matchId) await setTypingIndicator(matchId, false);
 
-    // Create pending message with clock icon (optimistic update)
     const pendingMessageId = `pending-${Date.now()}`;
     const pendingMessage: Message = {
       id: pendingMessageId,
@@ -319,20 +305,16 @@ export default function ChatScreen() {
       created_at: new Date().toISOString(),
       pending: true,
     };
-
-    // Add pending message immediately
     setMessages((prev) => [...prev, pendingMessage]);
 
     try {
       const { data, error } = await sendMessage(userId, matchId, content, messageType, gifUrl);
 
       if (error) {
-        console.error('❌ Error sending message:', error);
-        // Remove pending message on error
+        if (isMatchNotFound(error)) setConversationEnded(true);
+        else console.error('❌ Error sending message:', error);
         setMessages((prev) => prev.filter((msg) => msg.id !== pendingMessageId));
-        if (!gifUrl) {
-          setMessageText(content); // Restore message on error
-        }
+        if (!gifUrl) setMessageText(content);
         setSending(false);
         return;
       }
@@ -360,27 +342,17 @@ export default function ChatScreen() {
     }
   };
 
-  // Handle typing detection
   const handleTextChange = (text: string) => {
     setMessageText(text);
-    
-    // Set typing indicator
+    if (conversationEnded) return;
     if (matchId && text.trim().length > 0 && !isTyping) {
       setIsTyping(true);
       setTypingIndicator(matchId, true);
     }
-
-    // Clear existing timeout
-    if (typingTimeoutRef.current) {
-      clearTimeout(typingTimeoutRef.current);
-    }
-
-    // Stop typing after 2 seconds of inactivity
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     typingTimeoutRef.current = setTimeout(async () => {
       setIsTyping(false);
-      if (matchId) {
-        await setTypingIndicator(matchId, false);
-      }
+      if (matchId) await setTypingIndicator(matchId, false);
     }, 2000);
 
     // Scroll to bottom when typing
@@ -441,6 +413,15 @@ export default function ChatScreen() {
           {loading && isInitialLoad ? (
             <View style={styles.loadingContainer}>
               <ActivityIndicator size="large" color={Colors.primary} />
+            </View>
+          ) : conversationEnded && messages.length === 0 ? (
+            <View style={styles.emptyContainer}>
+              <Ionicons name="heart-dislike-outline" size={64} color={Colors.textLight} />
+              <Text style={styles.emptyText}>Conversation ended</Text>
+              <Text style={styles.emptySubtext}>You unmatched or this chat was removed.</Text>
+              <TouchableOpacity style={styles.backToMatchesButton} onPress={() => router.back()} activeOpacity={0.7}>
+                <Text style={styles.backToMatchesText}>Go back</Text>
+              </TouchableOpacity>
             </View>
           ) : messages.length === 0 && !loading ? (
             <View style={styles.emptyContainer}>
@@ -538,55 +519,54 @@ export default function ChatScreen() {
             </ScrollView>
           )}
 
-        {/* Input Area - Always visible */}
-        <View style={styles.inputContainer}>
-          <TouchableOpacity
-            style={styles.gifButton}
-            onPress={() => {
-              // Open GIF picker (using Giphy API or similar)
-              // For now, using a simple demo GIF
-              const demoGifs = [
-                'https://media.giphy.com/media/3o7aCTPPm4OHfRLSH6/giphy.gif',
-                'https://media.giphy.com/media/l0MYC0LajboP0Zb7G/giphy.gif',
-                'https://media.giphy.com/media/3o7abKhOpu0NwenH3O/giphy.gif',
-                'https://media.giphy.com/media/l0HlBO7eyXzSZkJri/giphy.gif',
-              ];
-              const randomGif = demoGifs[Math.floor(Math.random() * demoGifs.length)];
-              handleSendMessage(randomGif);
-            }}
-            activeOpacity={0.7}
-          >
-            <Ionicons name="images-outline" size={24} color={Colors.primary} />
-          </TouchableOpacity>
-          <TextInput
-            ref={inputRef}
-            style={styles.input}
-            placeholder="Type a message..."
-            placeholderTextColor={Colors.textLight}
-            value={messageText}
-            onChangeText={handleTextChange}
-            multiline
-            maxLength={1000}
-            editable={!sending && !(loading && isInitialLoad)}
-            returnKeyType="send"
-            blurOnSubmit={false}
-            onSubmitEditing={() => handleSendMessage()}
-            onFocus={() => {
-              // Scroll to bottom when input is focused (keyboard opens)
-              setTimeout(() => {
-                scrollViewRef.current?.scrollToEnd({ animated: true });
-              }, 300);
-            }}
-          />
-          <TouchableOpacity
-            style={[styles.sendButton, (!messageText.trim() || sending) && styles.sendButtonDisabled]}
-            onPress={() => handleSendMessage()}
-            disabled={!messageText.trim() || sending}
-            activeOpacity={0.7}
-          >
-            <Ionicons name="send" size={20} color={Colors.primaryText} />
-          </TouchableOpacity>
-        </View>
+        {/* Input Area - hidden when conversation ended */}
+        {!conversationEnded && (
+          <View style={styles.inputContainer}>
+            <TouchableOpacity
+              style={styles.gifButton}
+              onPress={() => {
+                const demoGifs = [
+                  'https://media.giphy.com/media/3o7aCTPPm4OHfRLSH6/giphy.gif',
+                  'https://media.giphy.com/media/l0MYC0LajboP0Zb7G/giphy.gif',
+                  'https://media.giphy.com/media/3o7abKhOpu0NwenH3O/giphy.gif',
+                  'https://media.giphy.com/media/l0HlBO7eyXzSZkJri/giphy.gif',
+                ];
+                const randomGif = demoGifs[Math.floor(Math.random() * demoGifs.length)];
+                handleSendMessage(randomGif);
+              }}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="images-outline" size={24} color={Colors.primary} />
+            </TouchableOpacity>
+            <TextInput
+              ref={inputRef}
+              style={styles.input}
+              placeholder="Type a message..."
+              placeholderTextColor={Colors.textLight}
+              value={messageText}
+              onChangeText={handleTextChange}
+              multiline
+              maxLength={1000}
+              editable={!sending && !(loading && isInitialLoad)}
+              returnKeyType="send"
+              blurOnSubmit={false}
+              onSubmitEditing={() => handleSendMessage()}
+              onFocus={() => {
+                setTimeout(() => {
+                  scrollViewRef.current?.scrollToEnd({ animated: true });
+                }, 300);
+              }}
+            />
+            <TouchableOpacity
+              style={[styles.sendButton, (!messageText.trim() || sending) && styles.sendButtonDisabled]}
+              onPress={() => handleSendMessage()}
+              disabled={!messageText.trim() || sending}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="send" size={20} color={Colors.primaryText} />
+            </TouchableOpacity>
+          </View>
+        )}
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -659,6 +639,18 @@ const styles = StyleSheet.create({
   emptySubtext: {
     fontSize: 16,
     color: Colors.textLight,
+  },
+  backToMatchesButton: {
+    marginTop: 20,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    backgroundColor: Colors.primary,
+    borderRadius: 12,
+  },
+  backToMatchesText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: Colors.primaryText,
   },
   keyboardView: {
     flex: 1,
