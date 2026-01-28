@@ -1,19 +1,11 @@
-import { Colors } from '@/constants/theme';
 import { Header } from '@/components/header';
+import { ListItemSkeleton } from '@/components/SkeletonLoader';
+import { Colors } from '@/constants/theme';
 import { getUserMatches, isPremiumUser } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
-import {
-  ActivityIndicator,
-  FlatList,
-  Modal,
-  RefreshControl,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { FlatList, Modal, RefreshControl, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
 
 interface MatchProfile {
@@ -64,13 +56,12 @@ export default function MatchScreen() {
   const [showLimitModal, setShowLimitModal] = useState(false);
   const [isPremium, setIsPremium] = useState(false);
 
-  // Fetch matches and premium status on focus (initial load + when returning from view-profile after unmatch/delete)
-  useFocusEffect(
-    useCallback(() => {
-      checkPremiumStatus();
-      fetchMatches();
-    }, [])
-  );
+  useEffect(() => {
+    fetchMatches(false);
+    checkPremiumStatus();
+  }, []);
+
+  useFocusEffect(useCallback(() => { checkPremiumStatus(); }, []));
 
   const checkPremiumStatus = async () => {
     const premium = await isPremiumUser();
@@ -79,43 +70,24 @@ export default function MatchScreen() {
 
   const fetchMatches = async (isRefresh = false) => {
     try {
-      if (isRefresh) {
-        setRefreshing(true);
-      } else {
-      setLoading(true);
-      }
-      
+      if (isRefresh) setRefreshing(true);
+      else setLoading(true);
       const { data, error } = await getUserMatches();
-
       if (error) {
         console.error('❌ Error fetching matches:', error);
-        if (isRefresh) {
-          setRefreshing(false);
-        } else {
-        setLoading(false);
-        }
         return;
       }
-
       if (data) {
         const valid = (data as MatchProfile[]).filter((m) => m.profile !== null);
         const active = valid.filter((m) => !m.match.is_expired);
         const expired = valid.filter((m) => m.match.is_expired);
         setMatches(dedupByMatchId([...active, ...expired]));
       }
-
-      if (isRefresh) {
-        setRefreshing(false);
-      } else {
-      setLoading(false);
-      }
-    } catch (error) {
-      console.error('❌ Error in fetchMatches:', error);
-      if (isRefresh) {
-        setRefreshing(false);
-      } else {
-      setLoading(false);
-      }
+    } catch (e) {
+      console.error('❌ Error in fetchMatches:', e);
+    } finally {
+      if (isRefresh) setRefreshing(false);
+      else setLoading(false);
     }
   };
 
@@ -166,27 +138,12 @@ export default function MatchScreen() {
   return (
     <View style={styles.container}>
       <Header logoText="Matches" showIcons={false} />
-
-      {loading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={Colors.primary} />
-          <Text style={styles.loadingText}>Loading matches...</Text>
-        </View>
-      ) : matches.length === 0 ? (
-        <View style={styles.emptyContainer}>
-          <View style={styles.emptyIconContainer}>
-            <Ionicons name="heart-outline" size={64} color={Colors.textLight} />
-          </View>
-          <Text style={styles.emptyTitle}>No matches yet</Text>
-          <Text style={styles.emptySubtitle}>
-            Start liking profiles to get matches! 💕
-          </Text>
-        </View>
-      ) : (
-        <FlatList
-          data={matches}
-          keyExtractor={(item) => item.match.id}
-          renderItem={({ item: matchProfile }) => {
+      <FlatList
+          data={loading ? [1, 2, 3] : matches}
+          keyExtractor={loading ? (_, i) => `skel-${i}` : (item) => item.match.id}
+          renderItem={({ item, index }) => {
+            if (loading) return <ListItemSkeleton />;
+            const matchProfile = item as MatchProfile;
             const { profile, match } = matchProfile;
             if (!profile) return null;
             const isExpired = !!match.is_expired;
@@ -232,8 +189,19 @@ export default function MatchScreen() {
             );
           }}
           ItemSeparatorComponent={() => <View style={styles.divider} />}
+          ListEmptyComponent={
+            !loading ? (
+              <View style={styles.emptyContainer}>
+                <View style={styles.emptyIconContainer}>
+                  <Ionicons name="heart-outline" size={64} color={Colors.textLight} />
+                </View>
+                <Text style={styles.emptyTitle}>No matches yet</Text>
+                <Text style={styles.emptySubtitle}>Start liking profiles to get matches! 💕</Text>
+              </View>
+            ) : null
+          }
+          contentContainerStyle={[styles.contentContainer, ...(!loading && matches.length === 0 ? [styles.emptyListContent] : [])]}
           style={styles.scrollView}
-          contentContainerStyle={styles.contentContainer}
           showsVerticalScrollIndicator={false}
           refreshControl={
             <RefreshControl
@@ -244,9 +212,6 @@ export default function MatchScreen() {
             />
           }
         />
-      )}
-
-      {/* Limit Warning Modal */}
       <Modal
         visible={showLimitModal}
         transparent
@@ -360,6 +325,9 @@ const styles = StyleSheet.create({
   contentContainer: {
     paddingTop: 8,
     paddingBottom: 32,
+  },
+  emptyListContent: {
+    flexGrow: 1,
   },
   divider: {
     height: 1,

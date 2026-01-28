@@ -1,4 +1,5 @@
 import { Header } from '@/components/header';
+import { ListItemSkeleton } from '@/components/SkeletonLoader';
 import { PremiumUpgradeBottomSheet } from '@/components/PremiumUpgradeBottomSheet';
 import { Colors } from '@/constants/theme';
 import { getMatchWithUser, getReceivedLikes, getReceivedProfileComments, isPremiumUser, likeUser, passUser } from '@/lib/supabase';
@@ -7,17 +8,7 @@ import { BlurView } from 'expo-blur';
 import { Image as ExpoImage } from 'expo-image';
 import { router, useFocusEffect } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  FlatList,
-  Modal,
-  RefreshControl,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { Alert, FlatList, Modal, RefreshControl, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 function dedupById<T extends { id: string }>(arr: T[]): T[] {
   const seen = new Set<string>();
@@ -218,45 +209,30 @@ export default function LikesScreen() {
   return (
     <View style={styles.container}>
       <Header logoText="Likes" showIcons={false} />
-
-      {loading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={Colors.primary} />
-          <Text style={styles.loadingText}>Loading likes & comments...</Text>
-        </View>
-      ) : items.length === 0 ? (
-        <View style={styles.emptyContainer}>
-          <View style={styles.emptyIconContainer}>
-            <Ionicons name="heart-outline" size={64} color={Colors.textLight} />
-          </View>
-          <Text style={styles.emptyTitle}>No likes or comments yet</Text>
-          <Text style={styles.emptySubtitle}>
-            Start swiping and sending comments! 💕
-          </Text>
-        </View>
-      ) : (
-        <FlatList
-          data={items}
-          keyExtractor={(item) => item.id}
+      <FlatList
+          data={loading ? [1, 2, 3] : items}
+          keyExtractor={loading ? (_, i) => `skel-${i}` : (item) => item.id}
           renderItem={({ item }) => {
-            const mainPhoto = item.photos?.length ? item.photos[0] : null;
-            const isComment = item.type === 'comment';
-            const preview = item.type === 'comment'
-              ? (item.comment_content.length > 40 ? `${item.comment_content.slice(0, 40)}…` : item.comment_content)
+            if (loading) return <ListItemSkeleton />;
+            const it = item as LikeOrComment;
+            const mainPhoto = it.photos?.length ? it.photos[0] : null;
+            const isComment = it.type === 'comment';
+            const preview = isComment
+              ? (it.comment_content.length > 40 ? `${it.comment_content.slice(0, 40)}…` : it.comment_content)
               : '';
             const statusMessage = isPremium
               ? isComment
-                ? `Commented: "${preview}" ${getTimeAgo(item.at)}`
-                : `Liked you ${getTimeAgo(item.at)}`
+                ? `Commented: "${preview}" ${getTimeAgo(it.at)}`
+                : `Liked you ${getTimeAgo(it.at)}`
               : isComment
                 ? 'Someone commented • Premium to see'
                 : 'Liked you • Premium to see';
             return (
               <TouchableOpacity
                 style={styles.likeItem}
-                onPress={() => handleItemPress(item)}
+                onPress={() => handleItemPress(it)}
                 activeOpacity={0.7}
-                disabled={processing === item.userId}
+                disabled={processing === it.userId}
               >
                 <View style={styles.photoContainer}>
                   {mainPhoto ? (
@@ -279,7 +255,7 @@ export default function LikesScreen() {
                 </View>
                 <View style={styles.likeInfo}>
                   <Text style={styles.likeName} numberOfLines={1}>
-                    {isPremium ? `${item.first_name}${item.last_name ? ` ${item.last_name}` : ''}` : 'Someone'}
+                    {isPremium ? `${it.first_name}${it.last_name ? ` ${it.last_name}` : ''}`.trim() || 'Someone' : 'Someone'}
                   </Text>
                   <Text style={styles.statusMessage} numberOfLines={1}>{statusMessage}</Text>
                 </View>
@@ -292,8 +268,19 @@ export default function LikesScreen() {
             );
           }}
           ItemSeparatorComponent={() => <View style={styles.divider} />}
+          ListEmptyComponent={
+            !loading ? (
+              <View style={styles.emptyContainer}>
+                <View style={styles.emptyIconContainer}>
+                  <Ionicons name="heart-outline" size={64} color={Colors.textLight} />
+                </View>
+                <Text style={styles.emptyTitle}>No likes or comments yet</Text>
+                <Text style={styles.emptySubtitle}>Start swiping and sending comments! 💕</Text>
+              </View>
+            ) : null
+          }
+          contentContainerStyle={[styles.contentContainer, ...(!loading && items.length === 0 ? [styles.emptyListContent] : [])]}
           style={styles.scrollView}
-          contentContainerStyle={styles.contentContainer}
           showsVerticalScrollIndicator={false}
           refreshControl={
             <RefreshControl
@@ -304,9 +291,6 @@ export default function LikesScreen() {
             />
           }
         />
-      )}
-
-      {/* Premium Upgrade Bottom Sheet – likes & comments as premium */}
       <PremiumUpgradeBottomSheet
         visible={showPremiumModal}
         onClose={() => setShowPremiumModal(false)}
@@ -319,8 +303,6 @@ export default function LikesScreen() {
           { icon: 'checkmark-circle', text: 'Unlimited likes' },
         ]}
       />
-
-      {/* Comment popup – blur overlay, title, comment, SEND LIKE */}
       <Modal
         visible={showCommentModal}
         transparent
@@ -432,6 +414,9 @@ const styles = StyleSheet.create({
   contentContainer: {
     paddingTop: 8,
     paddingBottom: 32,
+  },
+  emptyListContent: {
+    flexGrow: 1,
   },
   divider: {
     height: 1,

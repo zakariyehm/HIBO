@@ -126,7 +126,33 @@ export function SkeletonLoader({
   );
 }
 
-export function PostCardSkeleton() {
+/** Single list row skeleton (avatar + 2 lines) for Likes / Match screens */
+export function ListItemSkeleton() {
+  return (
+    <View style={listItemSkeletonStyles.row}>
+      <SkeletonLoader width={64} height={64} borderRadius={32} style={listItemSkeletonStyles.avatar} />
+      <View style={listItemSkeletonStyles.text}>
+        <SkeletonLoader width={140} height={18} borderRadius={4} style={{ marginBottom: 8 }} />
+        <SkeletonLoader width={100} height={14} borderRadius={4} />
+      </View>
+    </View>
+  );
+}
+
+const listItemSkeletonStyles = StyleSheet.create({
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    backgroundColor: Colors.cardBackground,
+  },
+  avatar: { marginRight: 16 },
+  text: { flex: 1 },
+});
+
+export function PostCardSkeleton({ contentWidth = SCREEN_WIDTH }: { contentWidth?: number }) {
+  const imgHeight = contentWidth * 1.1;
   return (
     <View style={postCardStyles.container}>
       <View style={postCardStyles.card}>
@@ -147,11 +173,11 @@ export function PostCardSkeleton() {
           </View>
         </View>
 
-        {/* Post Images - exact same as post-card.tsx imageContainer */}
-        <View style={postCardStyles.imageContainer}>
+        {/* Post Images - exact same as post-card.tsx (aspect 1.1) */}
+        <View style={[postCardStyles.imageContainer, { width: contentWidth }]}>
           <SkeletonLoader 
-            width={SCREEN_WIDTH} 
-            height={SCREEN_WIDTH * 1.2} 
+            width={contentWidth} 
+            height={imgHeight} 
             borderRadius={8} 
           />
         </View>

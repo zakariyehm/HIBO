@@ -7,7 +7,10 @@ import { canLikeUser, checkForMatch, checkMatchLimit, getAllUserProfiles, getCur
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, AppState, AppStateStatus, FlatList, Modal, RefreshControl, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, AppState, AppStateStatus, Dimensions, FlatList, Modal, RefreshControl, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const FEED_CONTENT_WIDTH = SCREEN_WIDTH - 32;
 
 interface UserProfile {
   id: string;
@@ -657,33 +660,14 @@ export default function HomeScreen() {
         }}
         actionIcon="sparkles"
       />
-      
-      {loading ? (
-        <ScrollView
-          style={styles.scrollView}
-          contentContainerStyle={styles.contentContainer}
-          showsVerticalScrollIndicator={false}
-        >
-          {/* Skeleton loaders matching post card style */}
-          {[1, 2, 3].map((i) => (
-            <React.Fragment key={i}>
-              {i > 1 && <View style={styles.divider} />}
-              <PostCardSkeleton />
-            </React.Fragment>
-          ))}
-        </ScrollView>
-      ) : feedItems.length === 0 ? (
-        <View style={styles.emptyContainer}>
-          <Text style={styles.emptyText}>No profiles found</Text>
-          <Text style={styles.emptySubtext}>
-            Check back later for new users!
-          </Text>
-        </View>
-      ) : (
-        <FlatList
-          data={feedItems}
-          keyExtractor={(item) => item.profile.id}
-          renderItem={({ item: feedItem, index }) => {
+      <FlatList
+          data={loading ? [1, 2, 3] : feedItems}
+          keyExtractor={loading ? (_, i) => `skel-${i}` : (item) => item.profile.id}
+          renderItem={({ item, index }) => {
+            if (loading) {
+              return <PostCardSkeleton contentWidth={FEED_CONTENT_WIDTH} />;
+            }
+            const feedItem = item as FeedItem;
             const profile = feedItem.profile;
             const contentBlock = feedItem.contentBlock;
             const fullName = profile.first_name;
@@ -738,6 +722,7 @@ export default function HomeScreen() {
                 userId={profile.id}
                 commentCount={0}
                 index={index}
+                contentWidth={FEED_CONTENT_WIDTH}
                 onShare={handleShare}
                 onComment={handleComment}
                 onLike={(userId, idx) => {
@@ -843,24 +828,32 @@ export default function HomeScreen() {
             );
           }}
           ItemSeparatorComponent={() => <View style={styles.divider} />}
+          ListEmptyComponent={
+            !loading ? (
+              <View style={styles.emptyContainer}>
+                <Text style={styles.emptyText}>No profiles found</Text>
+                <Text style={styles.emptySubtext}>Check back later for new users!</Text>
+              </View>
+            ) : null
+          }
           ListFooterComponent={
-            loadingMore && userProfiles.length > 0 ? (
+            loadingMore && userProfiles.length > 0 && !loading ? (
               <View style={styles.footerLoader}>
                 <ActivityIndicator size="small" color={Colors.primary} />
               </View>
             ) : null
           }
           onEndReached={() => {
-            if (feedItems.length > 0 && hasMoreProfiles && !loadingMore && !filtersApplied) {
+            if (feedItems.length > 0 && hasMoreProfiles && !loadingMore && !filtersApplied && !loading) {
               loadMoreProfiles();
             }
           }}
           onEndReachedThreshold={0.3}
-          initialNumToRender={10}
-          maxToRenderPerBatch={10}
+          initialNumToRender={loading ? 3 : 10}
+          maxToRenderPerBatch={loading ? 3 : 10}
           windowSize={5}
           style={styles.scrollView}
-          contentContainerStyle={styles.contentContainer}
+          contentContainerStyle={[styles.contentContainer, ...(!loading && feedItems.length === 0 ? [styles.emptyListContent] : [])]}
           showsVerticalScrollIndicator={false}
           refreshControl={
             <RefreshControl
@@ -872,8 +865,6 @@ export default function HomeScreen() {
             />
           }
         />
-      )}
-
       {/* Filter Modal */}
       <Modal
         visible={showFilterModal}
@@ -1172,7 +1163,6 @@ export default function HomeScreen() {
           </View>
         </View>
       </Modal>
-
       {/* Daily Like Limit Modal */}
       <Modal
         visible={showLikeLimitModal}
@@ -1240,7 +1230,6 @@ export default function HomeScreen() {
           </View>
         </View>
       </Modal>
-
       {/* Match Limit Blocking Modal (Tinder/Hinge style) */}
       <Modal
         visible={showLimitModal}
@@ -1296,7 +1285,6 @@ export default function HomeScreen() {
           </View>
         </View>
       </Modal>
-
       <Toast
         visible={toastVisible}
         message={toastMessage}
@@ -1340,6 +1328,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     padding: 32,
+  },
+  emptyListContent: {
+    flexGrow: 1,
   },
   emptyText: {
     fontSize: 20,

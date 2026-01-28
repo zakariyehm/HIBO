@@ -8,13 +8,14 @@ import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  KeyboardAvoidingView,
   Platform,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
-  View
+  View,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -189,6 +190,7 @@ const PaymentView = ({
   const currentPlan = planDetails[selectedPlan];
   const isApplePayAvailable = Platform.OS === 'ios';
   const isGooglePayAvailable = Platform.OS === 'android';
+  const insets = useSafeAreaInsets();
 
   const payButtonLabel =
     paymentMethod === 'hormuud'
@@ -198,98 +200,109 @@ const PaymentView = ({
         : 'Pay with Google Pay';
 
   return (
-    <View style={styles.paymentViewContainer}>
-      <Text style={styles.paymentTitle}>{currentPlan.name}</Text>
-      <Text style={styles.paymentPrice}>Starting today {currentPlan.price}</Text>
+    <KeyboardAvoidingView
+      style={styles.paymentViewContainer}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+    >
+      <ScrollView
+        style={styles.paymentScrollView}
+        contentContainerStyle={[styles.paymentScrollContent, { paddingBottom: Math.max(insets.bottom, 20) + 120 }]}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        <Text style={styles.paymentTitle}>{currentPlan.name}</Text>
+        <Text style={styles.paymentPrice}>Starting today {currentPlan.price}</Text>
 
-      <View style={styles.paymentForm}>
-        <Text style={styles.inputLabel}>Choose payment method</Text>
+        <View style={styles.paymentForm}>
+          <Text style={styles.inputLabel}>Choose payment method</Text>
 
-        {/* Hormuud – always */}
-        <TouchableOpacity
-          style={[styles.paymentOption, paymentMethod === 'hormuud' && styles.paymentOptionSelected]}
-          onPress={() => onPaymentMethodChange('hormuud')}
-          activeOpacity={0.8}
-        >
-          <Ionicons name="phone-portrait" size={24} color={paymentMethod === 'hormuud' ? Colors.textDark : Colors.textLight} />
-          <View style={styles.paymentOptionText}>
-            <Text style={[styles.paymentOptionTitle, paymentMethod === 'hormuud' && styles.paymentOptionTitleSelected]}>Hormuud</Text>
-            <Text style={styles.paymentOptionSub}>Mobile money</Text>
-          </View>
-          {paymentMethod === 'hormuud' && <Ionicons name="checkmark-circle" size={24} color={Colors.textDark} />}
-        </TouchableOpacity>
-
-        {/* Apple Pay – iOS only (hidden on Android) */}
-        {isApplePayAvailable && (
+          {/* Hormuud – always */}
           <TouchableOpacity
-            style={[styles.paymentOption, paymentMethod === 'apple_pay' && styles.paymentOptionSelected]}
-            onPress={() => onPaymentMethodChange('apple_pay')}
+            style={[styles.paymentOption, paymentMethod === 'hormuud' && styles.paymentOptionSelected]}
+            onPress={() => onPaymentMethodChange('hormuud')}
             activeOpacity={0.8}
           >
-            <Ionicons name="logo-apple" size={24} color={paymentMethod === 'apple_pay' ? Colors.textDark : Colors.textLight} />
+            <Ionicons name="phone-portrait" size={24} color={paymentMethod === 'hormuud' ? Colors.textDark : Colors.textLight} />
             <View style={styles.paymentOptionText}>
-              <Text style={[styles.paymentOptionTitle, paymentMethod === 'apple_pay' && styles.paymentOptionTitleSelected]}>Apple Pay</Text>
-              <Text style={styles.paymentOptionSub}>Pay with Face ID / Touch ID</Text>
+              <Text style={[styles.paymentOptionTitle, paymentMethod === 'hormuud' && styles.paymentOptionTitleSelected]}>Hormuud</Text>
+              <Text style={styles.paymentOptionSub}>Mobile money</Text>
             </View>
-            {paymentMethod === 'apple_pay' && <Ionicons name="checkmark-circle" size={24} color={Colors.textDark} />}
+            {paymentMethod === 'hormuud' && <Ionicons name="checkmark-circle" size={24} color={Colors.textDark} />}
           </TouchableOpacity>
-        )}
 
-        {/* Google Pay – Android only (hidden on iOS) */}
-        {isGooglePayAvailable && (
-          <TouchableOpacity
-            style={[styles.paymentOption, paymentMethod === 'google_pay' && styles.paymentOptionSelected]}
-            onPress={() => onPaymentMethodChange('google_pay')}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="logo-google" size={24} color={paymentMethod === 'google_pay' ? Colors.textDark : Colors.textLight} />
-            <View style={styles.paymentOptionText}>
-              <Text style={[styles.paymentOptionTitle, paymentMethod === 'google_pay' && styles.paymentOptionTitleSelected]}>Google Pay</Text>
-              <Text style={styles.paymentOptionSub}>Pay with Google</Text>
-            </View>
-            {paymentMethod === 'google_pay' && <Ionicons name="checkmark-circle" size={24} color={Colors.textDark} />}
-          </TouchableOpacity>
-        )}
-
-        {/* Phone input – only for Hormuud */}
-        {paymentMethod === 'hormuud' && (
-          <>
-            <Text style={[styles.inputLabel, { marginTop: 16 }]}>Enter your phone number</Text>
-            <View style={styles.phoneInputContainer}>
-              <View style={styles.countryCodeContainer}>
-                <Text style={styles.countryCode}>+252</Text>
+          {/* Apple Pay – iOS only (hidden on Android) */}
+          {isApplePayAvailable && (
+            <TouchableOpacity
+              style={[styles.paymentOption, paymentMethod === 'apple_pay' && styles.paymentOptionSelected]}
+              onPress={() => onPaymentMethodChange('apple_pay')}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="logo-apple" size={24} color={paymentMethod === 'apple_pay' ? Colors.textDark : Colors.textLight} />
+              <View style={styles.paymentOptionText}>
+                <Text style={[styles.paymentOptionTitle, paymentMethod === 'apple_pay' && styles.paymentOptionTitleSelected]}>Apple Pay</Text>
+                <Text style={styles.paymentOptionSub}>Pay with Face ID / Touch ID</Text>
               </View>
-              <TextInput
-                style={styles.phoneInput}
-                placeholder="61XXXXXX"
-                placeholderTextColor="#999"
-                value={phoneNumber.startsWith('252') ? phoneNumber.substring(3) : phoneNumber}
-                onChangeText={(text) => onPhoneChange('252' + text.replace(/\D/g, '').slice(0, 9))}
-                keyboardType="phone-pad"
-                maxLength={9}
-                autoFocus={false}
-              />
-            </View>
-          </>
-        )}
-
-        <TouchableOpacity
-          style={[styles.continueButton, isSubscribing && { opacity: 0.7 }]}
-          onPress={onSubscribe}
-          disabled={isSubscribing}
-        >
-          {isSubscribing ? (
-            <ActivityIndicator size="small" color="#FFFFFF" />
-          ) : (
-            <Text style={styles.continueButtonText}>{payButtonLabel}</Text>
+              {paymentMethod === 'apple_pay' && <Ionicons name="checkmark-circle" size={24} color={Colors.textDark} />}
+            </TouchableOpacity>
           )}
-        </TouchableOpacity>
 
-        <TouchableOpacity onPress={onBack} style={styles.cancelButton}>
-          <Text style={styles.cancelText}>Cancel</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
+          {/* Google Pay – Android only (hidden on iOS) */}
+          {isGooglePayAvailable && (
+            <TouchableOpacity
+              style={[styles.paymentOption, paymentMethod === 'google_pay' && styles.paymentOptionSelected]}
+              onPress={() => onPaymentMethodChange('google_pay')}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="logo-google" size={24} color={paymentMethod === 'google_pay' ? Colors.textDark : Colors.textLight} />
+              <View style={styles.paymentOptionText}>
+                <Text style={[styles.paymentOptionTitle, paymentMethod === 'google_pay' && styles.paymentOptionTitleSelected]}>Google Pay</Text>
+                <Text style={styles.paymentOptionSub}>Pay with Google</Text>
+              </View>
+              {paymentMethod === 'google_pay' && <Ionicons name="checkmark-circle" size={24} color={Colors.textDark} />}
+            </TouchableOpacity>
+          )}
+
+          {/* Phone input – only for Hormuud */}
+          {paymentMethod === 'hormuud' && (
+            <>
+              <Text style={[styles.inputLabel, { marginTop: 16 }]}>Enter your phone number</Text>
+              <View style={styles.phoneInputContainer}>
+                <View style={styles.countryCodeContainer}>
+                  <Text style={styles.countryCode}>+252</Text>
+                </View>
+                <TextInput
+                  style={styles.phoneInput}
+                  placeholder="61XXXXXX"
+                  placeholderTextColor="#999"
+                  value={phoneNumber.startsWith('252') ? phoneNumber.substring(3) : phoneNumber}
+                  onChangeText={(text) => onPhoneChange('252' + text.replace(/\D/g, '').slice(0, 9))}
+                  keyboardType="phone-pad"
+                  maxLength={9}
+                  autoFocus={false}
+                />
+              </View>
+            </>
+          )}
+
+          <TouchableOpacity
+            style={[styles.continueButton, isSubscribing && { opacity: 0.7 }]}
+            onPress={onSubscribe}
+            disabled={isSubscribing}
+          >
+            {isSubscribing ? (
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            ) : (
+              <Text style={styles.continueButtonText}>{payButtonLabel}</Text>
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity onPress={onBack} style={styles.cancelButton}>
+            <Text style={styles.cancelText}>Cancel</Text>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 };
 
@@ -574,7 +587,7 @@ export default function PremiumScreen() {
         )}
 
         {currentScreen === 'payment' && (
-          <View style={[styles.contentContainer, { paddingTop: 4 }]}>
+          <View style={[styles.contentContainer, styles.paymentWrapper, { paddingTop: 4 }]}>
             <PaymentView
               selectedPlan={selectedPlan}
               paymentMethod={paymentMethod}
@@ -643,6 +656,9 @@ const styles = StyleSheet.create({
     padding: 4,
   },
   scrollView: {
+    flex: 1,
+  },
+  paymentWrapper: {
     flex: 1,
   },
   contentContainer: {
@@ -793,10 +809,15 @@ const styles = StyleSheet.create({
   },
   paymentViewContainer: {
     flex: 1,
-    justifyContent: 'flex-start',
-    alignItems: 'center',
-    paddingTop: 4,
     width: '100%',
+  },
+  paymentScrollView: {
+    flex: 1,
+  },
+  paymentScrollContent: {
+    alignItems: 'center',
+    width: '100%',
+    paddingTop: 4,
   },
   paymentTitle: {
     fontSize: 28,

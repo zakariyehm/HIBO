@@ -3,7 +3,8 @@ import { blockUser, checkForMatch, getUserPrompts, getUserStatus, likeUser, pass
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useEffect, useState } from 'react';
-import { Alert, Dimensions, Image, Keyboard, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Image as ExpoImage } from 'expo-image';
+import { Alert, Dimensions, Keyboard, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -31,6 +32,8 @@ interface PostCardProps {
   onBlock?: (userId: string) => void;
   index?: number; // meeshii saxda ah (rollback haddii limit)
   remainingLikes?: number; // daily likes left (for purple pill)
+  /** Feed pass: card width for images (avoids overflow). Defaults to SCREEN_WIDTH. */
+  contentWidth?: number;
 }
 
 function PostCardBase({
@@ -57,6 +60,7 @@ function PostCardBase({
   onBlock,
   index,
   remainingLikes,
+  contentWidth = SCREEN_WIDTH,
 }: PostCardProps) {
   const { text: statusText, isOnline } = getUserStatus(lastActive);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
@@ -66,13 +70,11 @@ function PostCardBase({
   const [showCommentInput, setShowCommentInput] = useState(false);
   const [commentText, setCommentText] = useState('');
 
-  // Fetch prompts if userId provided and prompts not passed
+  // Fetch prompts only when not provided by parent (feed passes prompts; avoid refetch → no glitch)
   useEffect(() => {
-    if (userId && !prompts) {
+    if (userId && prompts === undefined) {
       getUserPrompts(userId).then(({ data }) => {
-        if (data) {
-          setUserPrompts(data.map((p: any) => ({ question: p.question, answer: p.answer })));
-        }
+        if (data?.length) setUserPrompts(data.map((p: any) => ({ question: p.question, answer: p.answer })));
       });
     }
   }, [userId, prompts]);
@@ -82,9 +84,9 @@ function PostCardBase({
   
   const handleScroll = (event: any) => {
     const contentOffsetX = event.nativeEvent.contentOffset.x;
-    const cardWidth = SCREEN_WIDTH;
-    const index = Math.round(contentOffsetX / cardWidth);
-    setCurrentImageIndex(index);
+    const cardWidth = contentWidth;
+    const idx = Math.round(contentOffsetX / cardWidth);
+    setCurrentImageIndex(idx);
   };
 
   const handleLike = async () => {
@@ -291,21 +293,25 @@ function PostCardBase({
 
         {/* Post Images - Swiper */}
         {imageArray.length > 0 && (
-          <View style={styles.imageContainer}>
+          <View style={[styles.imageContainer, { width: contentWidth }]}>
             <ScrollView
               horizontal
               pagingEnabled
               showsHorizontalScrollIndicator={false}
               onScroll={handleScroll}
               scrollEventThrottle={16}
-              style={styles.imageScrollView}
+              style={[styles.imageScrollView, { width: contentWidth }]}
             >
-              {imageArray.map((photo, index) => (
-                <Image
-                  key={index}
-                  source={{ uri: photo }}
-                  style={styles.postImage}
-                />
+              {imageArray.map((photo, idx) => (
+                <View key={idx} style={[styles.postImageWrapper, { width: contentWidth, height: contentWidth * 1.1 }]}>
+                  <View style={styles.postImagePlaceholder} />
+                  <ExpoImage
+                    source={{ uri: photo }}
+                    style={StyleSheet.absoluteFill}
+                    contentFit="cover"
+                    transition={200}
+                  />
+                </View>
               ))}
             </ScrollView>
             
@@ -582,15 +588,18 @@ const styles = StyleSheet.create({
     borderColor: '#000000',
   },
   imageScrollView: {
-    width: SCREEN_WIDTH,
+    flexGrow: 0,
   },
-  postImage: {
-    width: SCREEN_WIDTH,
-    height: SCREEN_WIDTH * 1.1, // Aspect ratio 1.1
-    resizeMode: 'cover',
+  postImageWrapper: {
+    position: 'relative',
     borderRadius: 8,
+    overflow: 'hidden',
     borderWidth: 0.5,
     borderColor: '#000000',
+  },
+  postImagePlaceholder: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: Colors.borderLight,
   },
   paginationContainer: {
     position: 'absolute',
