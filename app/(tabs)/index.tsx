@@ -1,5 +1,4 @@
 import { AppHeader } from '@/components/app-header';
-import { MatchPopup } from '@/components/MatchPopup';
 import { PostCard } from '@/components/post-card';
 import { Toast } from '@/components/Toast';
 import { PostCardSkeleton } from '@/components/SkeletonLoader';
@@ -208,9 +207,6 @@ export default function HomeScreen() {
   const [likeLimitInfo, setLikeLimitInfo] = useState<{ remaining: number; limit: number } | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMoreProfiles, setHasMoreProfiles] = useState(true);
-  const [showMatchPopup, setShowMatchPopup] = useState(false);
-  const [matchedUserName, setMatchedUserName] = useState('');
-  const [matchedUserPhoto, setMatchedUserPhoto] = useState<string | undefined>(undefined);
   const [toastVisible, setToastVisible] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
   const [toastType, setToastType] = useState<'info' | 'error' | 'success'>('success');
@@ -822,9 +818,10 @@ export default function HomeScreen() {
                     if (session?.user) {
                       const m = await checkForMatch(session.user.id, userId);
                       if (m?.data) {
-                        setShowMatchPopup(true);
-                        setMatchedUserName(matchName);
-                        setMatchedUserPhoto(matchPhoto);
+                        router.push({
+                          pathname: '/match-congratulations',
+                          params: { userId, userName: matchName, userPhoto: matchPhoto ?? '' },
+                        });
                       }
                     }
                   })();
@@ -1299,14 +1296,6 @@ export default function HomeScreen() {
           </View>
         </View>
       </Modal>
-
-      <MatchPopup
-        visible={showMatchPopup}
-        matchedUserName={matchedUserName}
-        matchedUserPhoto={matchedUserPhoto}
-        onClose={() => setShowMatchPopup(false)}
-        onViewMatch={() => setShowMatchPopup(false)}
-      />
 
       <Toast
         visible={toastVisible}

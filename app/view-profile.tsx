@@ -2,7 +2,6 @@
  * View Profile Screen - Display another user's full profile
  */
 
-import { MatchPopup } from '@/components/MatchPopup';
 import { Toast } from '@/components/Toast';
 import { Colors } from '@/constants/theme';
 import { blockUser, checkForMatch, getCurrentUser, getUserPosts, getUserProfile, getUserPrompts, isPremiumUser, isUserBlocked, likeUser, passUser, Post, recordProfileView, unmatchUser } from '@/lib/supabase';
@@ -68,7 +67,6 @@ export default function ViewProfileScreen() {
   const [prompts, setPrompts] = useState<Array<{ question: string; answer: string }>>([]);
   const [isPremium, setIsPremium] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [showMatchPopup, setShowMatchPopup] = useState(false);
 
   const showToast = (message: string, type: 'info' | 'error' | 'success' = 'info') => {
     setToastMessage(message);
@@ -290,45 +288,40 @@ export default function ViewProfileScreen() {
       return;
     }
 
-    // INSTANT feedback and navigation (Tinder-style - no delay!)
     showToast('Liked!', 'success');
-    
-    // Navigate back immediately (no setTimeout delay)
-    router.back();
-    
-    // Set processing briefly to prevent double-tap
     setIsProcessing(true);
-    setTimeout(() => setIsProcessing(false), 100);
-    
-    // ALL operations in background - completely non-blocking
-    Promise.all([
-      // Like user
-      likeUser(userId).then((likeResult) => {
-        if (likeResult.error) {
-          if (likeResult.error.message === 'MATCH_LIMIT_REACHED') {
-            // This shouldn't happen for premium users
-            return;
-          }
-        } else {
-          // Check for match in background
-          getCurrentUser().then(({ user }) => {
-            if (user) {
-              checkForMatch(user.id, userId).then((matchResult) => {
-                if (matchResult.data) {
-                  setShowMatchPopup(true);
-                }
-              }).catch((err) => {
-                console.error('❌ Error checking match:', err);
-              });
-            }
-          });
-        }
-      }),
-      // Record profile view
-      recordProfileView(userId)
-    ]).catch((error) => {
+    try {
+      const likeResult = await likeUser(userId);
+      if (likeResult.error) {
+        if (likeResult.error.message === 'MATCH_LIMIT_REACHED') return;
+        setIsProcessing(false);
+        return;
+      }
+      await recordProfileView(userId);
+      const { user } = await getCurrentUser();
+      if (!user) {
+        router.back();
+        return;
+      }
+      const matchResult = await checkForMatch(user.id, userId);
+      if (matchResult.data) {
+        router.replace({
+          pathname: '/match-congratulations',
+          params: {
+            userId,
+            userName: profile ? `${profile.first_name ?? ''} ${profile.last_name ?? ''}`.trim() || 'Someone' : 'Someone',
+            userPhoto: profile?.photos?.[0] ?? '',
+          },
+        });
+      } else {
+        router.back();
+      }
+    } catch (error) {
       console.error('❌ Error in handleLike:', error);
-    });
+      router.back();
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   const handlePass = async () => {
@@ -716,20 +709,6 @@ export default function ViewProfileScreen() {
           )}
         </View>
       )}
-
-      <MatchPopup
-        visible={showMatchPopup}
-        matchedUserName={profile ? `${profile.first_name} ${profile.last_name}` : 'Someone'}
-        matchedUserPhoto={profile?.photos?.[0]}
-        onClose={() => {
-          setShowMatchPopup(false);
-          router.back();
-        }}
-        onViewMatch={() => {
-          setShowMatchPopup(false);
-          router.push('/(tabs)/match');
-        }}
-      />
 
       <Toast
         visible={toastVisible}

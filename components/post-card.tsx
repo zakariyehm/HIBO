@@ -1,4 +1,3 @@
-import { MatchPopup } from '@/components/MatchPopup';
 import { Colors } from '@/constants/theme';
 import { blockUser, checkForMatch, getUserPrompts, getUserStatus, likeUser, passUser, recordProfileView, supabase } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
@@ -62,8 +61,7 @@ function PostCardBase({
   const { text: statusText, isOnline } = getUserStatus(lastActive);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [showMenu, setShowMenu] = useState(false);
-  const [isProcessing, setIsProcessing] = useState(false); // Single state for both actions
-  const [showMatchPopup, setShowMatchPopup] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
   const [userPrompts, setUserPrompts] = useState<Array<{ question: string; answer: string }>>(prompts || []);
   const [showCommentInput, setShowCommentInput] = useState(false);
   const [commentText, setCommentText] = useState('');
@@ -127,7 +125,14 @@ function PostCardBase({
           if (session?.user && userId) {
             checkForMatch(session.user.id, userId).then((matchResult: any) => {
               if (matchResult.data) {
-                setShowMatchPopup(true);
+                router.push({
+                  pathname: '/match-congratulations',
+                  params: {
+                    userId,
+                    userName: profileName,
+                    userPhoto: imageArray.length > 0 ? imageArray[0] : '',
+                  },
+                });
               }
             }).catch((err: any) => {
               console.error('❌ Error checking match:', err);
@@ -431,22 +436,6 @@ function PostCardBase({
         )}
 
       </View>
-
-      {/* Match Popup */}
-      <MatchPopup
-        visible={showMatchPopup}
-        matchedUserName={profileName}
-        matchedUserPhoto={imageArray.length > 0 ? imageArray[0] : undefined}
-        onClose={() => {
-          setShowMatchPopup(false);
-          if (onLike && userId) onLike(userId, index);
-        }}
-        onViewMatch={() => {
-          setShowMatchPopup(false);
-          if (onLike && userId) onLike(userId, index);
-          router.push('/(tabs)/match');
-        }}
-      />
     </View>
   );
 }
