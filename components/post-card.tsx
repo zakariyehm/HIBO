@@ -1,9 +1,9 @@
 import { Colors } from '@/constants/theme';
 import { blockUser, checkForMatch, getUserPrompts, getUserStatus, likeUser, passUser, recordProfileView, supabase } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
+import { Image as ExpoImage } from 'expo-image';
 import { router } from 'expo-router';
 import React, { useEffect, useState } from 'react';
-import { Image as ExpoImage } from 'expo-image';
 import { Alert, Dimensions, Keyboard, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -34,6 +34,13 @@ interface PostCardProps {
   remainingLikes?: number; // daily likes left (for purple pill)
   /** Feed pass: card width for images (avoids overflow). Defaults to SCREEN_WIDTH. */
   contentWidth?: number;
+  /** Profile details: Age, Orientation, Height, Location, Education, Nationality, Profession, Looking for */
+  age?: number;
+  height?: number;
+  interested_in?: string;
+  education_level?: string;
+  profession?: string;
+  looking_for?: string;
 }
 
 function PostCardBase({
@@ -61,6 +68,12 @@ function PostCardBase({
   index,
   remainingLikes,
   contentWidth = SCREEN_WIDTH,
+  age,
+  height,
+  interested_in,
+  education_level,
+  profession,
+  looking_for,
 }: PostCardProps) {
   const { text: statusText, isOnline } = getUserStatus(lastActive);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
@@ -361,7 +374,7 @@ function PostCardBase({
               disabled={isProcessing || !userId}
               activeOpacity={0.7}
             >
-              <Ionicons name="close" size={18} color={Colors.textDark} />
+              <Text style={styles.passEmoji}>✌🏽</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.sendLikeButtonPill}
@@ -440,6 +453,83 @@ function PostCardBase({
             ))}
           </View>
         )}
+
+        {/* Profile details – ONE card: 1 row (Age, Orientation, Height, Location, Nationality, Education) + vertical list (icon + label + value) */}
+        {(age != null && age > 0) || interested_in || height || location || education_level || (nationality && nationality.length > 0) || profession || looking_for ? (
+          <View style={styles.profileDetailsCard}>
+            {/* Top row: Age, Orientation, Height, Location, Nationality only (no Education) */}
+            <View style={styles.profileDetailsRow}>
+              {age != null && age > 0 && (
+                <View style={styles.profileDetailsPill}>
+                  <Ionicons name="calendar-outline" size={16} color={Colors.textDark} style={styles.profileDetailsRowIcon} />
+                  <Text style={styles.profileDetailsRowText}>{age}</Text>
+                </View>
+              )}
+              {interested_in ? (
+                <View style={styles.profileDetailsPill}>
+                  <Ionicons name="people-outline" size={16} color={Colors.textDark} style={styles.profileDetailsRowIcon} />
+                  <Text style={styles.profileDetailsRowText} numberOfLines={1}>{interested_in}</Text>
+                </View>
+              ) : null}
+              {height ? (
+                <View style={styles.profileDetailsPill}>
+                  <Ionicons name="resize-outline" size={16} color={Colors.textDark} style={styles.profileDetailsRowIcon} />
+                  <Text style={styles.profileDetailsRowText}>{height} cm</Text>
+                </View>
+              ) : null}
+              {location ? (
+                <View style={styles.profileDetailsPill}>
+                  <Ionicons name="location-outline" size={16} color={Colors.textDark} style={styles.profileDetailsRowIcon} />
+                  <Text style={styles.profileDetailsRowText} numberOfLines={1}>{location}</Text>
+                </View>
+              ) : null}
+              {nationality && nationality.length > 0 ? (
+                <View style={styles.profileDetailsPill}>
+                  <Ionicons name="earth-outline" size={16} color={Colors.textDark} style={styles.profileDetailsRowIcon} />
+                  <Text style={styles.profileDetailsRowText} numberOfLines={1}>{nationality.join(', ')}</Text>
+                </View>
+              ) : null}
+            </View>
+            {/* Vertical list: icon + label + value (sida screenshot) */}
+            <View style={styles.profileDetailsList}>
+              {profession ? (
+                <View style={styles.profileDetailsItem}>
+                  <Ionicons name="briefcase-outline" size={20} color={Colors.textDark} style={styles.profileDetailsItemIcon} />
+                  <Text style={styles.profileDetailsItemLabel}>Profession</Text>
+                  <Text style={styles.profileDetailsItemValue}>{profession}</Text>
+                </View>
+              ) : null}
+              {education_level ? (
+                <View style={styles.profileDetailsItem}>
+                  <Ionicons name="school-outline" size={20} color={Colors.textDark} style={styles.profileDetailsItemIcon} />
+                  <Text style={styles.profileDetailsItemLabel}>Education</Text>
+                  <Text style={styles.profileDetailsItemValue}>{education_level}</Text>
+                </View>
+              ) : null}
+              {location ? (
+                <View style={styles.profileDetailsItem}>
+                  <Ionicons name="home-outline" size={20} color={Colors.textDark} style={styles.profileDetailsItemIcon} />
+                  <Text style={styles.profileDetailsItemLabel}>Location</Text>
+                  <Text style={styles.profileDetailsItemValue}>{location}</Text>
+                </View>
+              ) : null}
+              {looking_for ? (
+                <View style={styles.profileDetailsItem}>
+                  <Ionicons name="search-outline" size={20} color={Colors.textDark} style={styles.profileDetailsItemIcon} />
+                  <Text style={styles.profileDetailsItemLabel}>Looking for</Text>
+                  <Text style={styles.profileDetailsItemValue}>{looking_for}</Text>
+                </View>
+              ) : null}
+              {interested_in ? (
+                <View style={styles.profileDetailsItem}>
+                  <Ionicons name="people-outline" size={20} color={Colors.textDark} style={styles.profileDetailsItemIcon} />
+                  <Text style={styles.profileDetailsItemLabel}>Orientation</Text>
+                  <Text style={styles.profileDetailsItemValue}>{interested_in}</Text>
+                </View>
+              ) : null}
+            </View>
+          </View>
+        ) : null}
 
       </View>
     </View>
@@ -677,7 +767,10 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 12,
     borderRadius: 999,
-    backgroundColor: '#E8DAEF',
+    backgroundColor: '#DAEFDA',
+  },
+  passEmoji: {
+    fontSize: 22,
   },
   sendLikeButtonPill: {
     flexDirection: 'row',
@@ -768,6 +861,62 @@ const styles = StyleSheet.create({
   },
   showMore: {
     color: Colors.textLight,
+  },
+  profileDetailsCard: {
+    marginBottom: 12,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 0,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: Colors.borderLight,
+  },
+  profileDetailsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.borderLight,
+  },
+  profileDetailsPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  profileDetailsRowIcon: {
+    opacity: 0.85,
+  },
+  profileDetailsRowText: {
+    fontSize: 15,
+    color: Colors.textDark,
+    fontWeight: '500',
+  },
+  profileDetailsList: {
+    gap: 0,
+  },
+  profileDetailsItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+  },
+  profileDetailsItemIcon: {
+    marginRight: 12,
+    opacity: 0.85,
+  },
+  profileDetailsItemLabel: {
+    fontSize: 15,
+    color: Colors.textLight,
+    fontWeight: '500',
+    flex: 1,
+  },
+  profileDetailsItemValue: {
+    fontSize: 15,
+    color: Colors.textDark,
+    fontWeight: '400',
+    textAlign: 'right',
+    flex: 1,
   },
   promptsContainer: {
     marginBottom: 12,

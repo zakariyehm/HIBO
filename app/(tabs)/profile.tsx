@@ -3,8 +3,8 @@
  * Display user profile information with dating app design
  */
 
-import { Toast } from '@/components/Toast';
 import { ProfileSkeleton } from '@/components/SkeletonLoader';
+import { Toast } from '@/components/Toast';
 import { Colors } from '@/constants/theme';
 import { createPost, createPrompt, deletePost, deletePrompt, getUserPosts, getUserProfile, getUserPrompts, Post, Prompt, PROMPT_QUESTIONS, signOut, supabase, updatePrompt, uploadPhotos } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
@@ -983,14 +983,14 @@ export default function ProfileScreen() {
           )}
           </View>
 
-        {/* Basic Info Card */}
+        {/* Basic Info Card – horizontal strip + vertical icon list (view/edit) */}
         <View style={styles.card}>
           <View style={styles.cardHeader}>
             <Text style={styles.cardTitle}>Basic Information</Text>
           </View>
-          
+
           {activeTab === 'edit' ? (
-            /* Edit Mode */
+            /* Edit Mode – same layout with inputs */
             <>
               <View style={styles.nameSection}>
                 <View style={styles.editRow}>
@@ -1019,10 +1019,13 @@ export default function ProfileScreen() {
                     placeholderTextColor={theme.placeholder}
                   />
                 </View>
-                <View style={styles.editRow}>
-                  <Text style={styles.infoLabel}>Age</Text>
+              </View>
+
+              <View style={styles.summaryStrip}>
+                <View style={styles.summaryItem}>
+                  <Ionicons name="calendar-outline" size={18} color={theme.black} style={styles.summaryIcon} />
                   <TextInput
-                    style={styles.editInputValue}
+                    style={[styles.summaryText, { padding: 0, minWidth: 36 }]}
                     value={editingProfile?.age?.toString() || ''}
                     onChangeText={(text) => setEditingProfile({ ...editingProfile, age: parseInt(text) || 0 })}
                     placeholder="Age"
@@ -1030,44 +1033,43 @@ export default function ProfileScreen() {
                     placeholderTextColor={theme.placeholder}
                   />
                 </View>
+                <View style={styles.summaryItem}>
+                  <Ionicons name="people-outline" size={18} color={theme.black} style={styles.summaryIcon} />
+                  <TextInput
+                    style={[styles.summaryText, { padding: 0, flex: 1, minWidth: 60 }]}
+                    value={editingProfile?.interested_in || ''}
+                    onChangeText={(text) => setEditingProfile({ ...editingProfile, interested_in: text })}
+                    placeholder="Orientation"
+                    placeholderTextColor={theme.placeholder}
+                  />
+                </View>
+                <View style={styles.summaryItem}>
+                  <Ionicons name="resize-outline" size={18} color={theme.black} style={styles.summaryIcon} />
+                  <TextInput
+                    style={[styles.summaryText, { padding: 0, minWidth: 40 }]}
+                    value={editingProfile?.height?.toString() || ''}
+                    onChangeText={(text) => setEditingProfile({ ...editingProfile, height: parseInt(text) || 0 })}
+                    placeholder="Height"
+                    keyboardType="numeric"
+                    placeholderTextColor={theme.placeholder}
+                  />
+                </View>
               </View>
 
-              <View style={styles.editRow}>
-                <Text style={styles.infoLabel}>📍 Location</Text>
+              <View style={styles.infoRow}>
+                <Ionicons name="location-outline" size={20} color={theme.black} style={styles.infoRowIcon} />
+                <Text style={styles.infoRowLabel}>Location</Text>
                 <TextInput
                   style={styles.editInputValue}
                   value={editingProfile?.location || ''}
                   onChangeText={(text) => setEditingProfile({ ...editingProfile, location: text })}
-                  placeholder="Location"
+                  placeholder="City / Location"
                   placeholderTextColor={theme.placeholder}
                 />
               </View>
-
-              <View style={styles.editRow}>
-                <Text style={styles.infoLabel}>📏 Height (cm)</Text>
-                <TextInput
-                  style={styles.editInputValue}
-                  value={editingProfile?.height?.toString() || ''}
-                  onChangeText={(text) => setEditingProfile({ ...editingProfile, height: parseInt(text) || 0 })}
-                  placeholder="Height"
-                  keyboardType="numeric"
-                  placeholderTextColor={theme.placeholder}
-                />
-              </View>
-
-              <View style={styles.editRow}>
-                <Text style={styles.infoLabel}>👤 Gender</Text>
-                <TextInput
-                  style={styles.editInputValue}
-                  value={editingProfile?.gender || ''}
-                  onChangeText={(text) => setEditingProfile({ ...editingProfile, gender: text })}
-                  placeholder="Gender"
-                  placeholderTextColor={theme.placeholder}
-                />
-              </View>
-
-              <View style={styles.editRow}>
-                <Text style={styles.infoLabel}>📧 Email</Text>
+              <View style={styles.infoRow}>
+                <Ionicons name="mail-outline" size={20} color={theme.black} style={styles.infoRowIcon} />
+                <Text style={styles.infoRowLabel}>Email</Text>
                 <TextInput
                   style={styles.editInputValue}
                   value={editingProfile?.email || ''}
@@ -1078,126 +1080,154 @@ export default function ProfileScreen() {
                   placeholderTextColor={theme.placeholder}
                 />
               </View>
-
-              <View style={styles.editRow}>
-                <Text style={styles.infoLabel}>📱 Phone Number</Text>
+              <View style={styles.infoRow}>
+                <Ionicons name="call-outline" size={20} color={theme.black} style={styles.infoRowIcon} />
+                <Text style={styles.infoRowLabel}>Phone</Text>
                 <TextInput
                   style={styles.editInputValue}
                   value={editingProfile?.phone_number || ''}
                   onChangeText={(text) => setEditingProfile({ ...editingProfile, phone_number: text })}
-                  placeholder="Phone number"
+                  placeholder="Phone"
                   keyboardType="phone-pad"
+                  placeholderTextColor={theme.placeholder}
+                />
+              </View>
+              <View style={styles.infoRow}>
+                <Ionicons name="person-outline" size={20} color={theme.black} style={styles.infoRowIcon} />
+                <Text style={styles.infoRowLabel}>Gender</Text>
+                <TextInput
+                  style={styles.editInputValue}
+                  value={editingProfile?.gender || ''}
+                  onChangeText={(text) => setEditingProfile({ ...editingProfile, gender: text })}
+                  placeholder="Gender"
                   placeholderTextColor={theme.placeholder}
                 />
               </View>
             </>
           ) : (
-            /* View Mode */
+            /* View Mode – horizontal strip + vertical icon list */
             <>
-          <View style={styles.nameSection}>
-            <Text style={styles.name}>
+              <View style={styles.nameSection}>
+                <Text style={styles.name}>
                   {userProfile.first_name && userProfile.last_name
                     ? `${userProfile.first_name} ${userProfile.last_name}`
                     : 'User'}
-            </Text>
-            {userProfile.age && (
-              <Text style={styles.age}>{userProfile.age} years old</Text>
-            )}
-          </View>
+                </Text>
+              </View>
 
-              {userProfile.email && (
-                <View style={styles.infoItem}>
-                  <Text style={styles.infoLabel}>📧 Email</Text>
-                  <Text style={styles.infoValue}>{userProfile.email}</Text>
+              <View style={styles.summaryStrip}>
+                {userProfile.age != null && userProfile.age > 0 && (
+                  <View style={styles.summaryItem}>
+                    <Ionicons name="calendar-outline" size={18} color={theme.black} style={styles.summaryIcon} />
+                    <Text style={styles.summaryText}>{userProfile.age}</Text>
+                  </View>
+                )}
+                {userProfile.interested_in ? (
+                  <View style={styles.summaryItem}>
+                    <Ionicons name="people-outline" size={18} color={theme.black} style={styles.summaryIcon} />
+                    <Text style={styles.summaryText}>{userProfile.interested_in}</Text>
+                  </View>
+                ) : null}
+                {userProfile.height ? (
+                  <View style={styles.summaryItem}>
+                    <Ionicons name="resize-outline" size={18} color={theme.black} style={styles.summaryIcon} />
+                    <Text style={styles.summaryText}>{userProfile.height} cm</Text>
+                  </View>
+                ) : null}
+              </View>
+
+              {userProfile.location ? (
+                <View style={styles.infoRow}>
+                  <Ionicons name="location-outline" size={20} color={theme.black} style={styles.infoRowIcon} />
+                  <Text style={styles.infoRowLabel}>Location</Text>
+                  <Text style={styles.infoRowValue}>{userProfile.location}</Text>
                 </View>
-              )}
-
-              {userProfile.phone_number && (
-                <View style={styles.infoItem}>
-                  <Text style={styles.infoLabel}>📱 Phone Number</Text>
-                  <Text style={styles.infoValue}>{userProfile.phone_number}</Text>
+              ) : null}
+              {userProfile.email ? (
+                <View style={styles.infoRow}>
+                  <Ionicons name="mail-outline" size={20} color={theme.black} style={styles.infoRowIcon} />
+                  <Text style={styles.infoRowLabel}>Email</Text>
+                  <Text style={styles.infoRowValue}>{userProfile.email}</Text>
                 </View>
-              )}
-
-          {userProfile.location && (
-            <View style={styles.infoItem}>
-              <Text style={styles.infoLabel}>📍 Location</Text>
-              <Text style={styles.infoValue}>{userProfile.location}</Text>
-            </View>
-          )}
-
-          {userProfile.height && (
-            <View style={styles.infoItem}>
-              <Text style={styles.infoLabel}>📏 Height</Text>
-              <Text style={styles.infoValue}>{userProfile.height} cm</Text>
-            </View>
-          )}
-
-          {userProfile.gender && (
-            <View style={styles.infoItem}>
-              <Text style={styles.infoLabel}>👤 Gender</Text>
-              <Text style={styles.infoValue}>{userProfile.gender}</Text>
-            </View>
-              )}
+              ) : null}
+              {userProfile.phone_number ? (
+                <View style={styles.infoRow}>
+                  <Ionicons name="call-outline" size={20} color={theme.black} style={styles.infoRowIcon} />
+                  <Text style={styles.infoRowLabel}>Phone</Text>
+                  <Text style={styles.infoRowValue}>{userProfile.phone_number}</Text>
+                </View>
+              ) : null}
+              {userProfile.gender ? (
+                <View style={styles.infoRow}>
+                  <Ionicons name="person-outline" size={20} color={theme.black} style={styles.infoRowIcon} />
+                  <Text style={styles.infoRowLabel}>Gender</Text>
+                  <Text style={styles.infoRowValue}>{userProfile.gender}</Text>
+                </View>
+              ) : null}
             </>
           )}
         </View>
 
-        {/* Preferences Card */}
+        {/* Preferences Card – icon rows */}
         <View style={styles.card}>
           <View style={styles.cardHeader}>
             <Text style={styles.cardTitle}>Preferences</Text>
           </View>
           {activeTab === 'edit' ? (
             <>
-              <View style={styles.editRow}>
-                <Text style={styles.infoLabel}>Interested in</Text>
+              <View style={styles.infoRow}>
+                <Ionicons name="people-outline" size={20} color={theme.black} style={styles.infoRowIcon} />
+                <Text style={styles.infoRowLabel}>Interested in</Text>
                 <TextInput
                   style={styles.editInputValue}
                   value={editingProfile?.interested_in || ''}
                   onChangeText={(text) => setEditingProfile({ ...editingProfile, interested_in: text })}
-                  placeholder="Interested in"
+                  placeholder="Orientation"
                   placeholderTextColor={theme.placeholder}
                 />
               </View>
-              <View style={styles.editRow}>
-                <Text style={styles.infoLabel}>Looking for</Text>
+              <View style={styles.infoRow}>
+                <Ionicons name="search-outline" size={20} color={theme.black} style={styles.infoRowIcon} />
+                <Text style={styles.infoRowLabel}>Looking for</Text>
                 <TextInput
                   style={styles.editInputValue}
                   value={editingProfile?.looking_for || ''}
                   onChangeText={(text) => setEditingProfile({ ...editingProfile, looking_for: text })}
-                  placeholder="Looking for"
+                  placeholder="Relationship goal"
                   placeholderTextColor={theme.placeholder}
                 />
               </View>
             </>
           ) : (
             <>
-              {userProfile.interested_in && (
-            <View style={styles.infoItem}>
-              <Text style={styles.infoLabel}>Interested in</Text>
-                  <Text style={styles.infoValue}>{userProfile.interested_in}</Text>
-            </View>
-          )}
-              {userProfile.looking_for && (
-            <View style={styles.infoItem}>
-              <Text style={styles.infoLabel}>Looking for</Text>
-                  <Text style={styles.infoValue}>{userProfile.looking_for}</Text>
-            </View>
-              )}
+              {userProfile.interested_in ? (
+                <View style={styles.infoRow}>
+                  <Ionicons name="people-outline" size={20} color={theme.black} style={styles.infoRowIcon} />
+                  <Text style={styles.infoRowLabel}>Interested in</Text>
+                  <Text style={styles.infoRowValue}>{userProfile.interested_in}</Text>
+                </View>
+              ) : null}
+              {userProfile.looking_for ? (
+                <View style={styles.infoRow}>
+                  <Ionicons name="search-outline" size={20} color={theme.black} style={styles.infoRowIcon} />
+                  <Text style={styles.infoRowLabel}>Looking for</Text>
+                  <Text style={styles.infoRowValue}>{userProfile.looking_for}</Text>
+                </View>
+              ) : null}
             </>
           )}
         </View>
 
-        {/* Professional Card */}
+        {/* Professional Card – icon rows */}
         <View style={styles.card}>
           <View style={styles.cardHeader}>
             <Text style={styles.cardTitle}>Professional</Text>
           </View>
           {activeTab === 'edit' ? (
             <>
-              <View style={styles.editRow}>
-                <Text style={styles.infoLabel}>💼 Profession</Text>
+              <View style={styles.infoRow}>
+                <Ionicons name="briefcase-outline" size={20} color={theme.black} style={styles.infoRowIcon} />
+                <Text style={styles.infoRowLabel}>Profession</Text>
                 <TextInput
                   style={styles.editInputValue}
                   value={editingProfile?.profession || ''}
@@ -1206,8 +1236,9 @@ export default function ProfileScreen() {
                   placeholderTextColor={theme.placeholder}
                 />
               </View>
-              <View style={styles.editRow}>
-                <Text style={styles.infoLabel}>🎓 Education</Text>
+              <View style={styles.infoRow}>
+                <Ionicons name="school-outline" size={20} color={theme.black} style={styles.infoRowIcon} />
+                <Text style={styles.infoRowLabel}>Education</Text>
                 <TextInput
                   style={styles.editInputValue}
                   value={editingProfile?.education_level || ''}
@@ -1219,31 +1250,45 @@ export default function ProfileScreen() {
             </>
           ) : (
             <>
-          {userProfile.profession && (
-            <View style={styles.infoItem}>
-              <Text style={styles.infoLabel}>💼 Profession</Text>
-              <Text style={styles.infoValue}>{userProfile.profession}</Text>
-            </View>
-          )}
-              {userProfile.education_level && (
-            <View style={styles.infoItem}>
-              <Text style={styles.infoLabel}>🎓 Education</Text>
-                  <Text style={styles.infoValue}>{userProfile.education_level}</Text>
-            </View>
-              )}
+              {userProfile.profession ? (
+                <View style={styles.infoRow}>
+                  <Ionicons name="briefcase-outline" size={20} color={theme.black} style={styles.infoRowIcon} />
+                  <Text style={styles.infoRowLabel}>Profession</Text>
+                  <Text style={styles.infoRowValue}>{userProfile.profession}</Text>
+                </View>
+              ) : null}
+              {userProfile.education_level ? (
+                <View style={styles.infoRow}>
+                  <Ionicons name="school-outline" size={20} color={theme.black} style={styles.infoRowIcon} />
+                  <Text style={styles.infoRowLabel}>Education</Text>
+                  <Text style={styles.infoRowValue}>{userProfile.education_level}</Text>
+                </View>
+              ) : null}
             </>
           )}
         </View>
 
-        {/* Personal Details Card */}
-          <View style={styles.card}>
-            <View style={styles.cardHeader}>
-              <Text style={styles.cardTitle}>Personal Details</Text>
-            </View>
+        {/* Personal Details Card – icon rows */}
+        <View style={styles.card}>
+          <View style={styles.cardHeader}>
+            <Text style={styles.cardTitle}>Personal Details</Text>
+          </View>
           {activeTab === 'edit' ? (
             <>
-              <View style={styles.editRow}>
-                <Text style={styles.infoLabel}>🏠 Grew up in</Text>
+              <View style={styles.infoRow}>
+                <Ionicons name="earth-outline" size={20} color={theme.black} style={styles.infoRowIcon} />
+                <Text style={styles.infoRowLabel}>Nationality</Text>
+                <TextInput
+                  style={styles.editInputValue}
+                  value={(editingProfile?.nationality || []).join(', ')}
+                  onChangeText={(text) => setEditingProfile({ ...editingProfile, nationality: text ? text.split(',').map(s => s.trim()).filter(Boolean) : [] })}
+                  placeholder="Nationality"
+                  placeholderTextColor={theme.placeholder}
+                />
+              </View>
+              <View style={styles.infoRow}>
+                <Ionicons name="home-outline" size={20} color={theme.black} style={styles.infoRowIcon} />
+                <Text style={styles.infoRowLabel}>Grew up in</Text>
                 <TextInput
                   style={styles.editInputValue}
                   value={editingProfile?.grow_up || ''}
@@ -1252,8 +1297,9 @@ export default function ProfileScreen() {
                   placeholderTextColor={theme.placeholder}
                 />
               </View>
-              <View style={styles.editRow}>
-                <Text style={styles.infoLabel}>🚭 Smoke</Text>
+              <View style={styles.infoRow}>
+                <Ionicons name="flame-outline" size={20} color={theme.black} style={styles.infoRowIcon} />
+                <Text style={styles.infoRowLabel}>Smoke</Text>
                 <TextInput
                   style={styles.editInputValue}
                   value={editingProfile?.smoke || ''}
@@ -1262,8 +1308,9 @@ export default function ProfileScreen() {
                   placeholderTextColor={theme.placeholder}
                 />
               </View>
-              <View style={styles.editRow}>
-                <Text style={styles.infoLabel}>👶 Has children</Text>
+              <View style={styles.infoRow}>
+                <Ionicons name="heart-outline" size={20} color={theme.black} style={styles.infoRowIcon} />
+                <Text style={styles.infoRowLabel}>Has children</Text>
                 <TextInput
                   style={styles.editInputValue}
                   value={editingProfile?.has_children || ''}
@@ -1275,32 +1322,36 @@ export default function ProfileScreen() {
             </>
           ) : (
             <>
-            {userProfile.nationality && userProfile.nationality.length > 0 && (
-              <View style={styles.infoItem}>
-                <Text style={styles.infoLabel}>🌍 Nationality</Text>
-                <Text style={styles.infoValue}>{userProfile.nationality.join(', ')}</Text>
-              </View>
-            )}
-              {userProfile.grow_up && (
-              <View style={styles.infoItem}>
-                <Text style={styles.infoLabel}>🏠 Grew up in</Text>
-                  <Text style={styles.infoValue}>{userProfile.grow_up}</Text>
-              </View>
-            )}
-            {userProfile.smoke && (
-              <View style={styles.infoItem}>
-                <Text style={styles.infoLabel}>🚭 Smoke</Text>
-                <Text style={styles.infoValue}>{userProfile.smoke}</Text>
-              </View>
-            )}
-              {userProfile.has_children && (
-              <View style={styles.infoItem}>
-                <Text style={styles.infoLabel}>👶 Has children</Text>
-                  <Text style={styles.infoValue}>{userProfile.has_children}</Text>
-              </View>
-            )}
+              {userProfile.nationality && userProfile.nationality.length > 0 ? (
+                <View style={styles.infoRow}>
+                  <Ionicons name="earth-outline" size={20} color={theme.black} style={styles.infoRowIcon} />
+                  <Text style={styles.infoRowLabel}>Nationality</Text>
+                  <Text style={styles.infoRowValue}>{userProfile.nationality.join(', ')}</Text>
+                </View>
+              ) : null}
+              {userProfile.grow_up ? (
+                <View style={styles.infoRow}>
+                  <Ionicons name="home-outline" size={20} color={theme.black} style={styles.infoRowIcon} />
+                  <Text style={styles.infoRowLabel}>Grew up in</Text>
+                  <Text style={styles.infoRowValue}>{userProfile.grow_up}</Text>
+                </View>
+              ) : null}
+              {userProfile.smoke ? (
+                <View style={styles.infoRow}>
+                  <Ionicons name="flame-outline" size={20} color={theme.black} style={styles.infoRowIcon} />
+                  <Text style={styles.infoRowLabel}>Smoke</Text>
+                  <Text style={styles.infoRowValue}>{userProfile.smoke}</Text>
+                </View>
+              ) : null}
+              {userProfile.has_children ? (
+                <View style={styles.infoRow}>
+                  <Ionicons name="heart-outline" size={20} color={theme.black} style={styles.infoRowIcon} />
+                  <Text style={styles.infoRowLabel}>Has children</Text>
+                  <Text style={styles.infoRowValue}>{userProfile.has_children}</Text>
+                </View>
+              ) : null}
             </>
-        )}
+          )}
         </View>
 
         {/* Personality Card */}
@@ -1855,10 +1906,8 @@ const styles = StyleSheet.create({
     textTransform: 'lowercase',
   },
   nameSection: {
-    marginBottom: 16,
-    paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.lightGray,
+    marginBottom: 8,
+    paddingBottom: 0,
   },
   name: {
     fontSize: 24,
@@ -1892,6 +1941,50 @@ const styles = StyleSheet.create({
     textAlign: 'right',
     flex: 1,
     marginLeft: 16,
+  },
+  summaryStrip: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 16,
+    gap: 12,
+  },
+  summaryItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    minWidth: '22%',
+  },
+  summaryIcon: {
+    opacity: 0.8,
+  },
+  summaryText: {
+    fontSize: 15,
+    color: theme.black,
+    fontWeight: '500',
+  },
+  infoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+  },
+  infoRowIcon: {
+    marginRight: 12,
+    opacity: 0.85,
+  },
+  infoRowLabel: {
+    fontSize: 16,
+    color: theme.gray,
+    fontWeight: '500',
+    flex: 1,
+  },
+  infoRowValue: {
+    fontSize: 16,
+    color: theme.black,
+    fontWeight: '400',
+    flex: 1,
+    textAlign: 'right',
   },
   tagsContainer: {
     flexDirection: 'row',

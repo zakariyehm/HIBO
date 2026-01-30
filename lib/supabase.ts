@@ -385,7 +385,7 @@ export const getAllUserProfiles = async (excludeUserId?: string) => {
     // 3. Then by created_at (newest profiles first)
     let query = supabase
       .from('profiles')
-      .select('id, first_name, last_name, location, bio, bio_title, photos, nationality, gender, interested_in, age, height, education_level, interests, personality, created_at, last_active')
+      .select('id, first_name, last_name, location, bio, bio_title, photos, nationality, gender, interested_in, age, height, education_level, profession, looking_for, interests, personality, created_at, last_active')
       .order('last_active', { ascending: false, nullsLast: true })
       .order('created_at', { ascending: false });
     
@@ -439,7 +439,7 @@ export const getUserProfilesPaginated = async (
 
     let query = supabase
       .from('profiles')
-      .select('id, first_name, last_name, location, bio, bio_title, photos, nationality, gender, interested_in, age, height, education_level, interests, personality, created_at, last_active')
+      .select('id, first_name, last_name, location, bio, bio_title, photos, nationality, gender, interested_in, age, height, education_level, profession, looking_for, interests, personality, created_at, last_active')
       .order('last_active', { ascending: false, nullsFirst: false })
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1);

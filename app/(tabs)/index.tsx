@@ -25,6 +25,11 @@ interface UserProfile {
   interested_in?: string;
   created_at: string;
   last_active?: string | null;
+  age?: number;
+  height?: number;
+  education_level?: string;
+  profession?: string;
+  looking_for?: string;
 }
 
 function dedupById<T extends { id: string }>(arr: T[]): T[] {
@@ -723,6 +728,12 @@ export default function HomeScreen() {
                 commentCount={0}
                 index={index}
                 contentWidth={FEED_CONTENT_WIDTH}
+                age={profile.age}
+                height={profile.height}
+                interested_in={profile.interested_in}
+                education_level={profile.education_level}
+                profession={profile.profession}
+                looking_for={profile.looking_for}
                 onShare={handleShare}
                 onComment={handleComment}
                 onLike={(userId, idx) => {
