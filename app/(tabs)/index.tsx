@@ -2,13 +2,14 @@ import { AppHeader } from '@/components/app-header';
 import { PostCard } from '@/components/post-card';
 import { PostCardSkeleton } from '@/components/SkeletonLoader';
 import { Toast } from '@/components/Toast';
-import { TransitionScreen } from '@/components/TransitionScreen';
+import { TransitionScreen } from '../../components/TransitionScreen';
 import { Colors } from '@/constants/theme';
 import { canLikeUser, checkForMatch, checkMatchLimit, getAllUserProfiles, getCurrentUser, getUserProfile, getUserProfilesPaginated, isPremiumUser, likeUser, recordProfileView, saveProfileComment, supabase, updateLastActive } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { AppState, AppStateStatus, Dimensions, Modal, RefreshControl, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Animated, AppState, AppStateStatus, Dimensions, Modal, NativeSyntheticEvent, NativeScrollEvent, RefreshControl, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const FEED_CONTENT_WIDTH = SCREEN_WIDTH - 32;
@@ -232,6 +233,10 @@ export default function HomeScreen() {
   const currentUserInterestRef = useRef<string | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const statusRefreshRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Scroll: floating header with user name (SliverAppBar-style)
+  const scrollY = useRef(new Animated.Value(0)).current;
+  const insets = useSafeAreaInsets();
+  const SCROLL_THRESHOLD = 80;
 
   // Function to apply filters to profiles
   const applyFilters = useCallback((profilesToFilter: UserProfile[]) => {
@@ -579,14 +584,10 @@ export default function HomeScreen() {
     }
   };
 
-  // HINGE: Move to next profile (called after like/pass)
+  // HINGE: Move to next profile (called after like/pass) – smooth, short transition
   const moveToNextProfile = useCallback(async () => {
-    // Show transition screen
     setShowTransition(true);
-    
-    // Wait 1 second
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
+    await new Promise(resolve => setTimeout(resolve, 400));
     const nextIndex = currentProfileIndex + 1;
     
     // If we're near the end of loaded profiles (within 3 profiles), load more
@@ -734,6 +735,19 @@ export default function HomeScreen() {
   const currentProfile = currentFeedItem?.profile;
   const currentContentBlock = currentFeedItem?.contentBlock;
 
+  // Floating header opacity: show when scrolled past threshold (SliverAppBar-style)
+  const floatingHeaderOpacity = scrollY.interpolate({
+    inputRange: [0, SCROLL_THRESHOLD],
+    outputRange: [0, 1],
+    extrapolate: 'clamp',
+  });
+
+  // Regular function so ScrollView can call it (Animated.event returns object, causes "onScroll is not a function")
+  const handleScroll = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const y = e.nativeEvent.contentOffset.y;
+    scrollY.setValue(y);
+  }, [scrollY]);
+
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" />
@@ -746,6 +760,8 @@ export default function HomeScreen() {
         actionIcon="sparkles"
       />
       <ScrollView
+        onScroll={handleScroll}
+        scrollEventThrottle={16}
         style={styles.scrollView}
         contentContainerStyle={styles.contentContainer}
         showsVerticalScrollIndicator={false}
@@ -926,6 +942,23 @@ export default function HomeScreen() {
           })()
         )}
       </ScrollView>
+      {/* Floating header when scrolled: user name centered (SliverAppBar-style) */}
+      <Animated.View
+        pointerEvents="box-none"
+        style={[
+          styles.floatingHeader,
+          {
+            paddingTop: insets.top,
+            opacity: floatingHeaderOpacity,
+          },
+        ]}
+      >
+        <View style={styles.floatingHeaderInner}>
+          <Text style={styles.floatingHeaderTitle} numberOfLines={1}>
+            {currentProfile?.first_name ?? 'For you'}
+          </Text>
+        </View>
+      </Animated.View>
       {/* Filter Modal */}
       <Modal
         visible={showFilterModal}
@@ -1374,6 +1407,25 @@ const styles = StyleSheet.create({
   contentContainer: {
     padding: 16,
     paddingTop: 16,
+  },
+  floatingHeader: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: 'transparent',
+    zIndex: 10,
+  },
+  floatingHeaderInner: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  floatingHeaderTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: Colors.textDark,
   },
   footerLoader: {
     paddingVertical: 20,

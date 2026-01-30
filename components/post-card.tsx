@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Image as ExpoImage } from 'expo-image';
 import { router } from 'expo-router';
 import React, { useEffect, useState } from 'react';
-import { Alert, Dimensions, Keyboard, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, Dimensions, InteractionManager, Keyboard, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -85,22 +85,18 @@ function PostCardBase({
   const [showCommentInput, setShowCommentInput] = useState(false);
   const [commentText, setCommentText] = useState('');
 
-  // Soo aqriso dhamaan prompts ee user-ka (add prompt)
+  // Defer heavy fetches until after card is visible (smooth like Hinge/Tinder)
   useEffect(() => {
-    if (userId) {
+    if (!userId) return;
+    const task = InteractionManager.runAfterInteractions(() => {
       getUserPrompts(userId).then(({ data }) => {
         if (data?.length) setUserPrompts(data.map((p: any) => ({ question: p.question, answer: p.answer })));
       });
-    }
-  }, [userId]);
-
-  // Soo aqriso dhamaan posts ee user-ka (post user uu soo galiyo)
-  useEffect(() => {
-    if (userId) {
       getUserPosts(userId).then(({ data }) => {
         if (data) setUserPosts(data);
       });
-    }
+    });
+    return () => task.cancel();
   }, [userId]);
   
   // Helper: extract post image URL (string, JSON string, or object)
@@ -355,7 +351,9 @@ function PostCardBase({
                     source={{ uri: photo }}
                     style={StyleSheet.absoluteFill}
                     contentFit="cover"
-                    transition={200}
+                    transition={150}
+                    recyclingKey={userId ? `${userId}-${idx}` : `img-${idx}`}
+                    cachePolicy="memory-disk"
                   />
                 </View>
               ))}
@@ -581,6 +579,9 @@ function PostCardBase({
                           source={{ uri: imageUri }}
                           style={styles.userPostCardImage}
                           contentFit="cover"
+                          transition={150}
+                          recyclingKey={`post-${post.id}`}
+                          cachePolicy="memory-disk"
                         />
                       </View>
                     ) : null}
