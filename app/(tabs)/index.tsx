@@ -1,13 +1,14 @@
 import { AppHeader } from '@/components/app-header';
 import { PostCard } from '@/components/post-card';
-import { Toast } from '@/components/Toast';
 import { PostCardSkeleton } from '@/components/SkeletonLoader';
+import { Toast } from '@/components/Toast';
+import { TransitionScreen } from '@/components/TransitionScreen';
 import { Colors } from '@/constants/theme';
-import { canLikeUser, checkForMatch, checkMatchLimit, getAllUserProfiles, getCurrentUser, getDailyLikeCount, getUserProfile, getUserPrompts, getUserProfilesPaginated, isPremiumUser, likeUser, recordProfileView, saveProfileComment, supabase, updateLastActive } from '@/lib/supabase';
+import { canLikeUser, checkForMatch, checkMatchLimit, getAllUserProfiles, getCurrentUser, getUserProfile, getUserProfilesPaginated, isPremiumUser, likeUser, recordProfileView, saveProfileComment, supabase, updateLastActive } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, AppState, AppStateStatus, Dimensions, FlatList, Modal, RefreshControl, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { AppState, AppStateStatus, Dimensions, Modal, RefreshControl, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const FEED_CONTENT_WIDTH = SCREEN_WIDTH - 32;
@@ -194,6 +195,7 @@ export default function HomeScreen() {
   const [userProfiles, setUserProfiles] = useState<UserProfile[]>([]);
   const [allProfiles, setAllProfiles] = useState<UserProfile[]>([]); // Store all unfiltered profiles
   const [feedItems, setFeedItems] = useState<FeedItem[]>([]); // Hinge-style feed items
+  const [currentProfileIndex, setCurrentProfileIndex] = useState(0); // HINGE: Track current profile being shown
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
@@ -218,6 +220,7 @@ export default function HomeScreen() {
   const [toastVisible, setToastVisible] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
   const [toastType, setToastType] = useState<'info' | 'error' | 'success'>('success');
+  const [showTransition, setShowTransition] = useState(false); // HINGE: Show transition screen between profiles
 
   const showToast = (message: string, type: 'info' | 'error' | 'success' = 'success') => {
     setToastMessage(message);
@@ -227,8 +230,8 @@ export default function HomeScreen() {
 
   const appState = useRef(AppState.currentState);
   const currentUserInterestRef = useRef<string | null>(null);
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
-  const statusRefreshRef = useRef<NodeJS.Timeout | null>(null);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const statusRefreshRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Function to apply filters to profiles
   const applyFilters = useCallback((profilesToFilter: UserProfile[]) => {
@@ -287,6 +290,10 @@ export default function HomeScreen() {
     }
 
     setUserProfiles(filtered);
+    // HINGE: Transform filtered profiles to feed items and reset index
+    const items = transformProfilesToFeedItems(filtered);
+    setFeedItems(items);
+    setCurrentProfileIndex(0);
   }, [ageRange, filters]);
 
   useEffect(() => {
@@ -421,12 +428,17 @@ export default function HomeScreen() {
     };
   }, [userProfiles.length]);
 
-  // Refresh feed when screen comes into focus (e.g., after viewing a profile)
+  // Update active status when screen comes into focus (don't refetch profiles to avoid heavy loading)
   useFocusEffect(
     React.useCallback(() => {
-      fetchUserProfiles();
-      updateCurrentUserActive(); // Update when screen comes into focus
-    }, [])
+      // Only update active status, don't refetch profiles (use pull-to-refresh instead)
+      updateCurrentUserActive();
+      
+      // Only fetch profiles if there are none loaded (initial load only)
+      if (feedItems.length === 0 && !loading) {
+        fetchUserProfiles();
+      }
+    }, [feedItems.length, loading])
   );
 
   // Update current user's active status
@@ -545,9 +557,15 @@ export default function HomeScreen() {
           setAllProfiles([]);
           setHasMoreProfiles(uniq.length === 0 ? false : hasMore);
         }
+        // HINGE: Reset to first profile when loading new profiles
+        if (!isRefresh) {
+          setCurrentProfileIndex(0);
+        }
       } else {
         setUserProfiles([]);
+        setFeedItems([]);
         setHasMoreProfiles(false);
+        setCurrentProfileIndex(0);
       }
       
       if (!isRefresh) {
@@ -560,6 +578,62 @@ export default function HomeScreen() {
       }
     }
   };
+
+  // HINGE: Move to next profile (called after like/pass)
+  const moveToNextProfile = useCallback(async () => {
+    // Show transition screen
+    setShowTransition(true);
+    
+    // Wait 1 second
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    
+    const nextIndex = currentProfileIndex + 1;
+    
+    // If we're near the end of loaded profiles (within 3 profiles), load more
+    if (nextIndex >= feedItems.length - 3 && hasMoreProfiles && !loadingMore && !filtersApplied) {
+      setLoadingMore(true);
+      try {
+        const res = await getUserProfilesPaginated(currentUserId || undefined, {
+          limit: 10,
+          offset: userProfiles.length,
+        });
+        if (res.error || !res.data) {
+          setHasMoreProfiles(false);
+        } else {
+          const interest = currentUserInterestRef.current;
+          let valid = res.data.filter(
+            (p: any) => p.photos?.length > 0 && p.bio?.trim?.()?.length > 0
+          );
+          if (interest) {
+            valid = valid.filter((p: any) => {
+              if (interest === 'Women') return p.gender === 'Female';
+              if (interest === 'Men') return p.gender === 'Male';
+              return false;
+            });
+          }
+          const newProfiles = (valid as UserProfile[]).filter((v) => {
+            const have = new Set(userProfiles.map((p) => p.id));
+            return !have.has(v.id);
+          });
+          
+          if (newProfiles.length > 0) {
+            setUserProfiles((prev) => [...prev, ...newProfiles]);
+            const newFeedItems = transformProfilesToFeedItems(newProfiles);
+            setFeedItems((prev) => [...prev, ...newFeedItems]);
+          }
+          setHasMoreProfiles(res.hasMore);
+        }
+      } finally {
+        setLoadingMore(false);
+      }
+    }
+    
+    // Move to next profile
+    setCurrentProfileIndex(nextIndex);
+    
+    // Hide transition screen
+    setShowTransition(false);
+  }, [currentProfileIndex, feedItems.length, hasMoreProfiles, loadingMore, filtersApplied, currentUserId, userProfiles.length]);
 
   const loadMoreProfiles = useCallback(async () => {
     if (loadingMore || !hasMoreProfiles || filtersApplied || feedItems.length === 0) return;
@@ -603,6 +677,7 @@ export default function HomeScreen() {
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
+    setCurrentProfileIndex(0); // HINGE: Reset to first profile
     await fetchUserProfiles(true);
     setRefreshing(false);
   }, []);
@@ -654,6 +729,11 @@ export default function HomeScreen() {
     return `${minutes}m`;
   };
 
+  // HINGE: Get current profile to display
+  const currentFeedItem = feedItems[currentProfileIndex];
+  const currentProfile = currentFeedItem?.profile;
+  const currentContentBlock = currentFeedItem?.contentBlock;
+
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" />
@@ -665,16 +745,31 @@ export default function HomeScreen() {
         }}
         actionIcon="sparkles"
       />
-      <FlatList
-          data={loading ? [1, 2, 3] : feedItems}
-          keyExtractor={loading ? (_, i) => `skel-${i}` : (item) => item.profile.id}
-          renderItem={({ item, index }) => {
-            if (loading) {
-              return <PostCardSkeleton contentWidth={FEED_CONTENT_WIDTH} />;
-            }
-            const feedItem = item as FeedItem;
-            const profile = feedItem.profile;
-            const contentBlock = feedItem.contentBlock;
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.contentContainer}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={Colors.primary}
+            colors={[Colors.primary]}
+            progressBackgroundColor={Colors.background}
+          />
+        }
+      >
+        {loading ? (
+          <PostCardSkeleton contentWidth={FEED_CONTENT_WIDTH} />
+        ) : !currentProfile || !currentContentBlock ? (
+          <View style={styles.emptyContainer}>
+            <Text style={styles.emptyText}>No more profiles</Text>
+            <Text style={styles.emptySubtext}>Check back later for new users!</Text>
+          </View>
+        ) : (
+          (() => {
+            const profile = currentProfile;
+            const contentBlock = currentContentBlock;
             const fullName = profile.first_name;
             const username = profile.first_name.toLowerCase();
             
@@ -726,7 +821,7 @@ export default function HomeScreen() {
                 nationality={profile.nationality}
                 userId={profile.id}
                 commentCount={0}
-                index={index}
+                index={currentProfileIndex}
                 contentWidth={FEED_CONTENT_WIDTH}
                 age={profile.age}
                 height={profile.height}
@@ -737,79 +832,73 @@ export default function HomeScreen() {
                 onShare={handleShare}
                 onComment={handleComment}
                 onLike={(userId, idx) => {
-                  // Hinge style: Like removes user completely, never show again
-                  setFeedItems((prev) => prev.filter((item) => item.profile.id !== userId));
-                  setUserProfiles((prev) => prev.filter((p) => p.id !== userId));
                   const matchName = profile.first_name;
                   const matchPhoto = profile.photos?.[0];
-                  const pro = profile;
-                  const restoreIdx = typeof idx === 'number' ? idx : index;
                   
                   (async () => {
-                    const [canLike, limitCheck] = await Promise.all([canLikeUser(), checkMatchLimit()]);
-                    if (!canLike.canLike) {
-                      // Restore user if like limit reached
-                      const restoredItem = feedItems.find(item => item.profile.id === pro.id);
-                      if (restoredItem) {
-                        setFeedItems((prev) => {
-                          if (prev.some((item) => item.profile.id === pro.id)) return prev;
-                          const c = [...prev];
-                          c.splice(Math.min(restoreIdx, c.length), 0, restoredItem);
-                          return c;
-                        });
+                    // PREMIUM USERS: Skip limit checks (faster, no loading)
+                    if (isPremium) {
+                      // Perform like action immediately (no limit checks)
+                      const likeResult = await likeUser(userId);
+                      if (likeResult.error) {
+                        showToast('Failed to like user', 'error');
+                        return;
                       }
-                      setUserProfiles((prev) => {
-                        if (prev.some((p) => p.id === pro.id)) return prev;
-                        const c = [...prev];
-                        c.splice(Math.min(restoreIdx, c.length), 0, pro);
-                        return c;
-                      });
+                      
+                      // Update like count and mark as seen
+                      updateLikeCount();
+                      recordProfileView(userId).catch(() => {});
+                      
+                      // Move to next profile (with transition)
+                      await moveToNextProfile();
+                      
+                      // Check for match
+                      const { data: { session } } = await supabase.auth.getSession();
+                      if (session?.user) {
+                        const m = await checkForMatch(session.user.id, userId);
+                        if (m?.data) {
+                          router.push({
+                            pathname: '/match-congratulations',
+                            params: { userId, userName: matchName, userPhoto: matchPhoto ?? '' },
+                          });
+                        }
+                      }
+                      return;
+                    }
+                    
+                    // FREE USERS: Check limits FIRST (no loading/transition until we know it's allowed)
+                    const [canLike, limitCheck] = await Promise.all([canLikeUser(), checkMatchLimit()]);
+                    
+                    if (!canLike.canLike) {
+                      // Show like limit modal, don't move to next
                       setLikeLimitInfo({ remaining: canLike.remaining, limit: canLike.limit });
                       setShowLikeLimitModal(true);
                       return;
                     }
+                    
                     if (limitCheck.reached) {
-                      // Restore user if match limit reached
-                      const restoredItem = feedItems.find(item => item.profile.id === pro.id);
-                      if (restoredItem) {
-                        setFeedItems((prev) => {
-                          if (prev.some((item) => item.profile.id === pro.id)) return prev;
-                          const c = [...prev];
-                          c.splice(Math.min(restoreIdx, c.length), 0, restoredItem);
-                          return c;
-                        });
-                      }
-                      setUserProfiles((prev) => {
-                        if (prev.some((p) => p.id === pro.id)) return prev;
-                        const c = [...prev];
-                        c.splice(Math.min(restoreIdx, c.length), 0, pro);
-                        return c;
-                      });
+                      // Show match limit modal, don't move to next
                       setMatchLimitInfo({ waitingCount: limitCheck.waitingCount, limit: limitCheck.limit });
                       setShowLimitModal(true);
                       return;
                     }
+                    
+                    // Perform like action
                     const likeResult = await likeUser(userId);
                     if (likeResult.error) {
-                      // Restore user on error
-                      const restoredItem = feedItems.find(item => item.profile.id === pro.id);
-                      if (restoredItem) {
-                        setFeedItems((prev) => {
-                          const c = [...prev];
-                          c.splice(Math.min(restoreIdx, c.length), 0, restoredItem);
-                          return c;
-                        });
-                      }
-                      setUserProfiles((prev) => {
-                        const c = [...prev];
-                        c.splice(Math.min(restoreIdx, c.length), 0, pro);
-                        return c;
-                      });
+                      // Show error, don't move to next
+                      showToast('Failed to like user', 'error');
                       return;
                     }
+                    
+                    // Update like count and mark as seen
                     updateLikeCount();
-                    // Mark user as seen - they will never appear again
                     recordProfileView(userId).catch(() => {});
+                    
+                    // NOW move to next profile (with transition) - only after successful like
+                    await moveToNextProfile();
+                    
+                    // Check for match (after transition)
                     const { data: { session } } = await supabase.auth.getSession();
                     if (session?.user) {
                       const m = await checkForMatch(session.user.id, userId);
@@ -822,60 +911,21 @@ export default function HomeScreen() {
                     }
                   })();
                 }}
-                onPass={(userId) => {
-                  // Hinge style: Pass removes user completely, never show again
-                  setFeedItems((prev) => prev.filter((item) => item.profile.id !== userId));
-                  setUserProfiles((prev) => prev.filter((p) => p.id !== userId));
-                  // Mark user as seen (will be handled by recordProfileView in like, but for pass we should also mark)
+                onPass={async (userId) => {
+                  // HINGE: Mark user as seen and move to next profile
                   recordProfileView(userId).catch(() => {});
+                  await moveToNextProfile();
                 }}
                 onBlock={(userId) => {
-                  // Block removes user completely
-                  setFeedItems((prev) => prev.filter((item) => item.profile.id !== userId));
-                  setUserProfiles((prev) => prev.filter((p) => p.id !== userId));
+                  // HINGE: Block user and move to next profile
+                  moveToNextProfile();
                 }}
                 remainingLikes={likeCount.remaining}
               />
             );
-          }}
-          ItemSeparatorComponent={() => <View style={styles.divider} />}
-          ListEmptyComponent={
-            !loading ? (
-              <View style={styles.emptyContainer}>
-                <Text style={styles.emptyText}>No profiles found</Text>
-                <Text style={styles.emptySubtext}>Check back later for new users!</Text>
-              </View>
-            ) : null
-          }
-          ListFooterComponent={
-            loadingMore && userProfiles.length > 0 && !loading ? (
-              <View style={styles.footerLoader}>
-                <ActivityIndicator size="small" color={Colors.primary} />
-              </View>
-            ) : null
-          }
-          onEndReached={() => {
-            if (feedItems.length > 0 && hasMoreProfiles && !loadingMore && !filtersApplied && !loading) {
-              loadMoreProfiles();
-            }
-          }}
-          onEndReachedThreshold={0.3}
-          initialNumToRender={loading ? 3 : 10}
-          maxToRenderPerBatch={loading ? 3 : 10}
-          windowSize={5}
-          style={styles.scrollView}
-          contentContainerStyle={[styles.contentContainer, ...(!loading && feedItems.length === 0 ? [styles.emptyListContent] : [])]}
-          showsVerticalScrollIndicator={false}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={onRefresh}
-              tintColor={Colors.primary}
-              colors={[Colors.primary]}
-              progressBackgroundColor={Colors.background}
-            />
-          }
-        />
+          })()
+        )}
+      </ScrollView>
       {/* Filter Modal */}
       <Modal
         visible={showFilterModal}
@@ -1121,7 +1171,12 @@ export default function HomeScreen() {
                     status: 'all',
                   });
                   setFiltersApplied(false);
-                  setUserProfiles(allProfiles.length > 0 ? allProfiles : userProfiles);
+                  const profilesToUse = allProfiles.length > 0 ? allProfiles : userProfiles;
+                  setUserProfiles(profilesToUse);
+                  // HINGE: Reset feed items and index when resetting filters
+                  const items = transformProfilesToFeedItems(profilesToUse);
+                  setFeedItems(items);
+                  setCurrentProfileIndex(0);
                 }}
               >
                 <Text style={styles.resetButtonText}>Reset</Text>
@@ -1302,6 +1357,8 @@ export default function HomeScreen() {
         type={toastType}
         onClose={() => setToastVisible(false)}
       />
+      {/* HINGE: Transition screen between profiles (1 second) */}
+      {showTransition && <TransitionScreen />}
     </View>
   );
 }
