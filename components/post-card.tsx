@@ -1,5 +1,6 @@
 import { Colors } from '@/constants/theme';
-import { blockUser, checkForMatch, getUserPrompts, getUserStatus, likeUser, passUser, recordProfileView, supabase } from '@/lib/supabase';
+import type { Post } from '@/lib/supabase';
+import { blockUser, checkForMatch, getUserPosts, getUserPrompts, getUserStatus, likeUser, passUser, recordProfileView, supabase } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import { Image as ExpoImage } from 'expo-image';
 import { router } from 'expo-router';
@@ -80,18 +81,50 @@ function PostCardBase({
   const [showMenu, setShowMenu] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [userPrompts, setUserPrompts] = useState<Array<{ question: string; answer: string }>>(prompts || []);
+  const [userPosts, setUserPosts] = useState<Post[]>([]);
   const [showCommentInput, setShowCommentInput] = useState(false);
   const [commentText, setCommentText] = useState('');
 
-  // Fetch prompts only when not provided by parent (feed passes prompts; avoid refetch → no glitch)
+  // Soo aqriso dhamaan prompts ee user-ka (add prompt)
   useEffect(() => {
-    if (userId && prompts === undefined) {
+    if (userId) {
       getUserPrompts(userId).then(({ data }) => {
         if (data?.length) setUserPrompts(data.map((p: any) => ({ question: p.question, answer: p.answer })));
       });
     }
-  }, [userId, prompts]);
+  }, [userId]);
+
+  // Soo aqriso dhamaan posts ee user-ka (post user uu soo galiyo)
+  useEffect(() => {
+    if (userId) {
+      getUserPosts(userId).then(({ data }) => {
+        if (data) setUserPosts(data);
+      });
+    }
+  }, [userId]);
   
+  // Helper: extract post image URL (string, JSON string, or object)
+  const getPostImageUrl = (imageUrl: any): string | null => {
+    if (!imageUrl) return null;
+    if (typeof imageUrl === 'string') {
+      const t = imageUrl.trim();
+      if (t.startsWith('http')) return t;
+      if (t.startsWith('{') || t.startsWith('[')) {
+        try {
+          const p = JSON.parse(t);
+          return p.publicUrl || p.path || null;
+        } catch {
+          return null;
+        }
+      }
+      return null;
+    }
+    if (typeof imageUrl === 'object' && imageUrl !== null) {
+      return (imageUrl as any).publicUrl || (imageUrl as any).path || null;
+    }
+    return null;
+  };
+
   // Use photos array if provided, otherwise fallback to postImage
   const imageArray = photos && photos.length > 0 ? photos : (postImage ? [postImage] : []);
   
@@ -531,6 +564,38 @@ function PostCardBase({
           </View>
         ) : null}
 
+        {/* Section 7: Posts – dhamaan posts ee user-ka (soo aqriso profile kiisa) */}
+        {userPosts.length > 0 && (
+          <View style={styles.postsSection}>
+            <View style={styles.postsList}>
+              {userPosts.map((post) => {
+                const imageUri = getPostImageUrl(post.image_url);
+                return (
+                  <View key={post.id} style={styles.userPostCard}>
+                    {post.title ? (
+                      <Text style={styles.userPostCardTitle}>{post.title}</Text>
+                    ) : null}
+                    {imageUri ? (
+                      <View style={styles.userPostCardImageContainer}>
+                        <ExpoImage
+                          source={{ uri: imageUri }}
+                          style={styles.userPostCardImage}
+                          contentFit="cover"
+                        />
+                      </View>
+                    ) : null}
+                    {post.description ? (
+                      <View style={styles.userPostCardDescriptionContainer}>
+                        <Text style={styles.userPostCardDescription}>{post.description}</Text>
+                      </View>
+                    ) : null}
+                  </View>
+                );
+              })}
+            </View>
+          </View>
+        )}
+
       </View>
     </View>
   );
@@ -917,6 +982,52 @@ const styles = StyleSheet.create({
     fontWeight: '400',
     textAlign: 'right',
     flex: 1,
+  },
+  postsSection: {
+    marginBottom: 12,
+  },
+  postsSectionTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: Colors.textDark,
+    marginBottom: 12,
+  },
+  postsList: {
+    gap: 12,
+  },
+  userPostCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 0,
+    overflow: 'hidden',
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: Colors.borderLight,
+    padding: 0,
+  },
+  userPostCardTitle: {
+    fontSize: 14,
+    color: Colors.textLight,
+    fontWeight: '400',
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 8,
+  },
+  userPostCardImageContainer: {
+    width: '100%',
+    aspectRatio: 3 / 4,
+    backgroundColor: Colors.borderLight,
+  },
+  userPostCardImage: {
+    width: '100%',
+    height: '100%',
+  },
+  userPostCardDescriptionContainer: {
+    padding: 16,
+  },
+  userPostCardDescription: {
+    fontSize: 15,
+    color: Colors.textDark,
+    lineHeight: 22,
   },
   promptsContainer: {
     marginBottom: 12,
