@@ -1,11 +1,11 @@
-import { Colors } from '@/constants/theme';
 import { getPremiumPlanById } from '@/components/SnapchatStyleBottomSheet';
+import { Colors } from '@/constants/theme';
 import { getProductIdForPlan, purchaseSubscription, setOnPurchaseError, setOnPurchaseSuccess } from '@/lib/iap';
 import { createSubscription, type PaymentMethod } from '@/lib/supabase';
 import { waafiPreAuthorize, waafiPreAuthorizeCancel, waafiPreAuthorizeCommit } from '@/lib/waafipay';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -18,7 +18,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // Payment View – plan comes from bottom sheet (route params); 3 methods: Hormuud, Apple Pay, Google Pay
 const PaymentView = ({
@@ -31,6 +31,8 @@ const PaymentView = ({
   onSubscribe,
   onBack,
   isSubscribing,
+  scrollRef,
+  onPhoneInputFocus,
 }: {
   planName: string;
   planPrice: string;
@@ -41,6 +43,8 @@ const PaymentView = ({
   onSubscribe: () => void;
   onBack: () => void;
   isSubscribing: boolean;
+  scrollRef?: React.RefObject<ScrollView | null>;
+  onPhoneInputFocus?: () => void;
 }) => {
   const isApplePayAvailable = Platform.OS === 'ios';
   const isGooglePayAvailable = Platform.OS === 'android';
@@ -56,12 +60,13 @@ const PaymentView = ({
   return (
     <KeyboardAvoidingView
       style={styles.paymentViewContainer}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 56}
     >
       <ScrollView
+        ref={scrollRef}
         style={styles.paymentScrollView}
-        contentContainerStyle={[styles.paymentScrollContent, { paddingBottom: Math.max(insets.bottom, 20) + 120 }]}
+        contentContainerStyle={[styles.paymentScrollContent, { paddingBottom: Math.max(insets.bottom, 20) + 280 }]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
@@ -134,6 +139,7 @@ const PaymentView = ({
                   keyboardType="phone-pad"
                   maxLength={9}
                   autoFocus={false}
+                  onFocus={onPhoneInputFocus}
                 />
               </View>
             </>
@@ -167,7 +173,13 @@ export default function PremiumScreen() {
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('hormuud');
   const [phoneNumber, setPhoneNumber] = useState('252');
   const [isSubscribing, setIsSubscribing] = useState(false);
-  const insets = useSafeAreaInsets();
+  const scrollRef = useRef<ScrollView>(null);
+
+  const scrollToPhoneInput = () => {
+    setTimeout(() => {
+      scrollRef.current?.scrollTo({ y: 220, animated: true });
+    }, 100);
+  };
 
   const handlePhoneChange = (text: string) => {
     if (text.startsWith('252')) {
@@ -362,29 +374,21 @@ export default function PremiumScreen() {
 
   return (
     <View style={styles.container}>
-      <SafeAreaView style={styles.safeArea} edges={['top']}>
-        {/* Header */}
-        <View style={[styles.header, { paddingTop: insets.top + 4 }]}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.closeButton}>
-            <Ionicons name="close" size={24} color={Colors.textDark} />
-          </TouchableOpacity>
-        </View>
-
-        {/* Content - Payment only */}
-        <View style={[styles.contentContainer, styles.paymentWrapper, { paddingTop: 4 }]}>
-          <PaymentView
-            planName={planConfig.name}
-            planPrice={planConfig.price}
-            paymentMethod={paymentMethod}
-            onPaymentMethodChange={setPaymentMethod}
-            phoneNumber={phoneNumber}
-            onPhoneChange={handlePhoneChange}
-            onSubscribe={handleSubscribe}
-            onBack={() => router.back()}
-            isSubscribing={isSubscribing}
-          />
-        </View>
-      </SafeAreaView>
+      <View style={[styles.contentContainer, styles.paymentWrapper]}>
+        <PaymentView
+          planName={planConfig.name}
+          planPrice={planConfig.price}
+          paymentMethod={paymentMethod}
+          onPaymentMethodChange={setPaymentMethod}
+          phoneNumber={phoneNumber}
+          onPhoneChange={handlePhoneChange}
+          onSubscribe={handleSubscribe}
+          onBack={() => router.back()}
+          isSubscribing={isSubscribing}
+          scrollRef={scrollRef}
+          onPhoneInputFocus={scrollToPhoneInput}
+        />
+      </View>
     </View>
   );
 }
@@ -394,28 +398,15 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.cardBackground,
   },
-  safeArea: {
-    flex: 1,
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    paddingHorizontal: 16,
-    paddingBottom: 4,
-    zIndex: 10,
-  },
-  closeButton: {
-    padding: 4,
-  },
   paymentWrapper: {
     flex: 1,
   },
   contentContainer: {
+    flex: 1,
     paddingHorizontal: 25,
-    paddingTop: 20,
+    paddingTop: 16,
     justifyContent: 'center',
     alignItems: 'center',
-    minHeight: '100%',
   },
   paymentViewContainer: {
     flex: 1,
