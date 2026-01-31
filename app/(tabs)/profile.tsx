@@ -787,9 +787,18 @@ export default function ProfileScreen() {
             <Text style={styles.headerName}>
               {userProfile?.first_name || 'Profile'}
             </Text>
-            <TouchableOpacity onPress={handleLogout} style={styles.logoutButton}>
-              <Ionicons name="log-out-outline" size={24} color={theme.error} />
-            </TouchableOpacity>
+            <View style={styles.headerRightRow}>
+              <TouchableOpacity
+                onPress={() => router.push('/settings')}
+                style={styles.headerIconButton}
+                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              >
+                <Ionicons name="settings-outline" size={24} color={theme.black} />
+              </TouchableOpacity>
+              <TouchableOpacity onPress={handleLogout} style={styles.logoutButton}>
+                <Ionicons name="log-out-outline" size={24} color={theme.error} />
+              </TouchableOpacity>
+            </View>
           </>
         )}
       </View>
@@ -1783,10 +1792,16 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: theme.black,
   },
+  headerRightRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  headerIconButton: {
+    padding: 4,
+  },
   logoutButton: {
-    width: 60,
-    alignItems: 'flex-end',
-    paddingRight: 16,
+    padding: 4,
   },
   separator: {
     height: 1,

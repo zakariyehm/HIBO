@@ -1,6 +1,7 @@
 import { AppHeader } from '@/components/app-header';
 import { PostCard } from '@/components/post-card';
 import { PostCardSkeleton } from '@/components/SkeletonLoader';
+import { PREMIUM_PLANS_FOR_SHEET, SnapchatStyleBottomSheet } from '@/components/SnapchatStyleBottomSheet';
 import { Toast } from '@/components/Toast';
 import { TransitionScreen } from '../../components/TransitionScreen';
 import { Colors } from '@/constants/theme';
@@ -215,6 +216,7 @@ export default function HomeScreen() {
   const [isPremium, setIsPremium] = useState(false);
   const [likeCount, setLikeCount] = useState({ remaining: Infinity, limit: Infinity });
   const [showLikeLimitModal, setShowLikeLimitModal] = useState(false);
+  const [showPremiumSheet, setShowPremiumSheet] = useState(false);
   const [likeLimitInfo, setLikeLimitInfo] = useState<{ remaining: number; limit: number } | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMoreProfiles, setHasMoreProfiles] = useState(true);
@@ -1311,7 +1313,7 @@ export default function HomeScreen() {
                 style={[styles.limitModalButton, styles.premiumButton]}
                 onPress={() => {
                   setShowLikeLimitModal(false);
-                  router.push('/premium');
+                  setShowPremiumSheet(true);
                 }}
                 activeOpacity={0.7}
               >
@@ -1365,7 +1367,7 @@ export default function HomeScreen() {
                   style={[styles.limitModalButton, styles.premiumButton]}
                   onPress={() => {
                     setShowLimitModal(false);
-                    router.push('/premium');
+                    setShowPremiumSheet(true);
                   }}
                   activeOpacity={0.7}
                 >
@@ -1392,6 +1394,26 @@ export default function HomeScreen() {
       />
       {/* HINGE: Transition screen between profiles (1 second) */}
       {showTransition && <TransitionScreen />}
+      
+      {/* Premium Upgrade Bottom Sheet */}
+      <SnapchatStyleBottomSheet
+        visible={showPremiumSheet}
+        onClose={() => setShowPremiumSheet(false)}
+        headerIcon="star"
+        title="Upgrade to Premium"
+        description="Send unlimited likes and unlock all premium features!"
+        plans={PREMIUM_PLANS_FOR_SHEET}
+        initialSelectedPlanId="yearly"
+        primaryButtonText="Get Premium"
+        onPrimaryPress={(selectedPlanId) => {
+          setShowPremiumSheet(false);
+          router.push({ pathname: '/premium', params: { plan: selectedPlanId ?? 'monthly' } });
+        }}
+        footerSegments={[
+          { type: 'text', value: 'By tapping Get Premium, you agree to our ' },
+          { type: 'link', label: 'Terms', onPress: () => setShowPremiumSheet(false) },
+        ]}
+      />
     </View>
   );
 }

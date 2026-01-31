@@ -1,5 +1,6 @@
 import { Header } from '@/components/header';
 import { ListItemSkeleton } from '@/components/SkeletonLoader';
+import { PREMIUM_PLANS_FOR_SHEET, SnapchatStyleBottomSheet } from '@/components/SnapchatStyleBottomSheet';
 import { Colors } from '@/constants/theme';
 import { getUserMatches, isPremiumUser } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
@@ -54,6 +55,7 @@ export default function MatchScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [showLimitModal, setShowLimitModal] = useState(false);
+  const [showPremiumSheet, setShowPremiumSheet] = useState(false);
   const [isPremium, setIsPremium] = useState(false);
 
   useEffect(() => {
@@ -260,7 +262,7 @@ export default function MatchScreen() {
                     style={styles.premiumButton}
                     onPress={() => {
                       setShowLimitModal(false);
-                      router.push('/premium');
+                      setShowPremiumSheet(true);
                     }}
                     activeOpacity={0.7}
                   >
@@ -272,6 +274,26 @@ export default function MatchScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Premium Upgrade Bottom Sheet */}
+      <SnapchatStyleBottomSheet
+        visible={showPremiumSheet}
+        onClose={() => setShowPremiumSheet(false)}
+        headerIcon="people"
+        title="Upgrade to Premium"
+        description="Get a higher match limit and never worry about limits again!"
+        plans={PREMIUM_PLANS_FOR_SHEET}
+        initialSelectedPlanId="yearly"
+        primaryButtonText="Get Premium"
+        onPrimaryPress={(selectedPlanId) => {
+          setShowPremiumSheet(false);
+          router.push({ pathname: '/premium', params: { plan: selectedPlanId ?? 'monthly' } });
+        }}
+        footerSegments={[
+          { type: 'text', value: 'By tapping Get Premium, you agree to our ' },
+          { type: 'link', label: 'Terms', onPress: () => setShowPremiumSheet(false) },
+        ]}
+      />
     </View>
   );
 }

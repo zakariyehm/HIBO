@@ -2,6 +2,7 @@
  * View Profile Screen - Display another user's full profile
  */
 
+import { PREMIUM_PLANS_FOR_SHEET, SnapchatStyleBottomSheet } from '@/components/SnapchatStyleBottomSheet';
 import { Toast } from '@/components/Toast';
 import { Colors } from '@/constants/theme';
 import { blockUser, checkForMatch, getCurrentUser, getUserPosts, getUserProfile, getUserPrompts, isPremiumUser, isUserBlocked, likeUser, passUser, Post, recordProfileView, unmatchUser } from '@/lib/supabase';
@@ -67,6 +68,7 @@ export default function ViewProfileScreen() {
   const [prompts, setPrompts] = useState<Array<{ question: string; answer: string }>>([]);
   const [isPremium, setIsPremium] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [showPremiumSheet, setShowPremiumSheet] = useState(false);
 
   const showToast = (message: string, type: 'info' | 'error' | 'success' = 'info') => {
     setToastMessage(message);
@@ -274,17 +276,7 @@ export default function ViewProfileScreen() {
     if (!userId || isProcessing || isCurrentUser) return;
     
     if (!isPremium) {
-      Alert.alert(
-        'Premium Required',
-        'You need a premium subscription to like users. Upgrade to unlock unlimited likes and matches.',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { 
-            text: 'Upgrade', 
-            onPress: () => router.push('/premium') 
-          },
-        ]
-      );
+      setShowPremiumSheet(true);
       return;
     }
 
@@ -328,17 +320,7 @@ export default function ViewProfileScreen() {
     if (!userId || isProcessing || isCurrentUser) return;
     
     if (!isPremium) {
-      Alert.alert(
-        'Premium Required',
-        'You need a premium subscription to use this feature. Upgrade to unlock all features.',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { 
-            text: 'Upgrade', 
-            onPress: () => router.push('/premium') 
-          },
-        ]
-      );
+      setShowPremiumSheet(true);
       return;
     }
 
@@ -715,6 +697,26 @@ export default function ViewProfileScreen() {
         message={toastMessage}
         type={toastType}
         onClose={() => setToastVisible(false)}
+      />
+
+      {/* Premium Upgrade Bottom Sheet */}
+      <SnapchatStyleBottomSheet
+        visible={showPremiumSheet}
+        onClose={() => setShowPremiumSheet(false)}
+        headerIcon="heart"
+        title="Upgrade to Premium"
+        description="Unlock unlimited likes and all premium features!"
+        plans={PREMIUM_PLANS_FOR_SHEET}
+        initialSelectedPlanId="yearly"
+        primaryButtonText="Get Premium"
+        onPrimaryPress={(selectedPlanId) => {
+          setShowPremiumSheet(false);
+          router.push({ pathname: '/premium', params: { plan: selectedPlanId ?? 'monthly' } });
+        }}
+        footerSegments={[
+          { type: 'text', value: 'By tapping Get Premium, you agree to our ' },
+          { type: 'link', label: 'Terms', onPress: () => setShowPremiumSheet(false) },
+        ]}
       />
     </View>
   );

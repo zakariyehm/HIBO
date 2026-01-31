@@ -1,6 +1,6 @@
 import { Header } from '@/components/header';
 import { ListItemSkeleton } from '@/components/SkeletonLoader';
-import { PremiumUpgradeBottomSheet } from '@/components/PremiumUpgradeBottomSheet';
+import { PREMIUM_PLANS_FOR_SHEET, SnapchatStyleBottomSheet } from '@/components/SnapchatStyleBottomSheet';
 import { Colors } from '@/constants/theme';
 import { getMatchWithUser, getReceivedLikes, getReceivedProfileComments, isPremiumUser, likeUser, passUser } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
@@ -209,12 +209,12 @@ export default function LikesScreen() {
   return (
     <View style={styles.container}>
       <Header logoText="Likes" showIcons={false} />
-      <FlatList
-          data={loading ? [1, 2, 3] : items}
-          keyExtractor={loading ? (_, i) => `skel-${i}` : (item) => item.id}
+      <FlatList<LikeOrComment | null>
+          data={loading ? [null, null, null] : items}
+          keyExtractor={(item, i) => item?.id ?? `skel-${i}`}
           renderItem={({ item }) => {
-            if (loading) return <ListItemSkeleton />;
-            const it = item as LikeOrComment;
+            if (loading || !item) return <ListItemSkeleton />;
+            const it = item;
             const mainPhoto = it.photos?.length ? it.photos[0] : null;
             const isComment = it.type === 'comment';
             const preview = isComment
@@ -291,16 +291,22 @@ export default function LikesScreen() {
             />
           }
         />
-      <PremiumUpgradeBottomSheet
+      <SnapchatStyleBottomSheet
         visible={showPremiumModal}
         onClose={() => setShowPremiumModal(false)}
+        headerIcon="heart"
         title="Upgrade to Premium"
         description="See who liked you and who commented! Unlock photos and messages."
-        features={[
-          { icon: 'checkmark-circle', text: 'See who liked you' },
-          { icon: 'checkmark-circle', text: 'See who commented & read messages' },
-          { icon: 'checkmark-circle', text: 'Unblur all photos' },
-          { icon: 'checkmark-circle', text: 'Unlimited likes' },
+        plans={PREMIUM_PLANS_FOR_SHEET}
+        initialSelectedPlanId="yearly"
+        primaryButtonText="Get Premium"
+        onPrimaryPress={(selectedPlanId) => {
+          setShowPremiumModal(false);
+          router.push({ pathname: '/premium', params: { plan: selectedPlanId ?? 'monthly' } });
+        }}
+        footerSegments={[
+          { type: 'text', value: 'By tapping Get Premium, you agree to our ' },
+          { type: 'link', label: 'Terms', onPress: () => setShowPremiumModal(false) },
         ]}
       />
       <Modal
