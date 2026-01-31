@@ -1,4 +1,4 @@
-import { getPremiumPlanById } from '@/components/SnapchatStyleBottomSheet';
+import { getPremiumPlanById } from '@/components/HiboBottomSheet';
 import { Colors } from '@/constants/theme';
 import { getProductIdForPlan, purchaseSubscription, setOnPurchaseError, setOnPurchaseSuccess } from '@/lib/iap';
 import { createSubscription, type PaymentMethod } from '@/lib/supabase';
@@ -241,7 +241,7 @@ export default function PremiumScreen() {
       return;
     }
 
-    // Hormuud: 3-step WaafiPay Preauthorization flow (amount from SnapchatStyleBottomSheet config)
+    // Hormuud: 3-step WaafiPay Preauthorization flow (amount from HiboBottomSheet config)
     setIsSubscribing(true);
     let waafiTransactionId: string | null = null;
 

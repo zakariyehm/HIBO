@@ -2,7 +2,7 @@
  * View Profile Screen - Display another user's full profile
  */
 
-import { PREMIUM_PLANS_FOR_SHEET, SnapchatStyleBottomSheet } from '@/components/SnapchatStyleBottomSheet';
+import { PREMIUM_PLANS_FOR_SHEET, HiboBottomSheet } from '@/components/HiboBottomSheet';
 import { Toast } from '@/components/Toast';
 import { Colors } from '@/constants/theme';
 import { blockUser, checkForMatch, getCurrentUser, getUserPosts, getUserProfile, getUserPrompts, isPremiumUser, isUserBlocked, likeUser, passUser, Post, recordProfileView, unmatchUser } from '@/lib/supabase';
@@ -700,7 +700,7 @@ export default function ViewProfileScreen() {
       />
 
       {/* Premium Upgrade Bottom Sheet */}
-      <SnapchatStyleBottomSheet
+      <HiboBottomSheet
         visible={showPremiumSheet}
         onClose={() => setShowPremiumSheet(false)}
         headerIcon="heart"

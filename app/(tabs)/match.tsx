@@ -1,6 +1,6 @@
 import { Header } from '@/components/header';
 import { ListItemSkeleton } from '@/components/SkeletonLoader';
-import { PREMIUM_PLANS_FOR_SHEET, SnapchatStyleBottomSheet } from '@/components/SnapchatStyleBottomSheet';
+import { PREMIUM_PLANS_FOR_SHEET, HiboBottomSheet } from '@/components/HiboBottomSheet';
 import { Colors } from '@/constants/theme';
 import { getUserMatches, isPremiumUser } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
@@ -276,7 +276,7 @@ export default function MatchScreen() {
       </Modal>
 
       {/* Premium Upgrade Bottom Sheet */}
-      <SnapchatStyleBottomSheet
+      <HiboBottomSheet
         visible={showPremiumSheet}
         onClose={() => setShowPremiumSheet(false)}
         headerIcon="people"

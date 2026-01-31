@@ -1,6 +1,6 @@
 /**
- * Premium Plan Bottom Sheet (using @gorhom/bottom-sheet)
- * Snapchat-style UI: rounded sheet, orange accent, plan selection, primary button
+ * HIBO Premium Plan Bottom Sheet (using @gorhom/bottom-sheet)
+ * Rounded sheet, plan selection, primary button
  */
 
 import {
@@ -13,11 +13,11 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import type { BottomSheetBackdropProps } from '@gorhom/bottom-sheet';
 
-const SNAP_PRIMARY = '#E8DAEF';    // lavender
-const SNAP_SECONDARY = '#DAEFDA';  // mint green
-const SNAP_ACCENT = '#F4E4BC';     // cream
-const SNAP_GREY = '#8E8E93';
-const SNAP_LINK = '#007AFF';
+const HIBO_PRIMARY = '#E8DAEF';    // lavender
+const HIBO_SECONDARY = '#DAEFDA';  // mint green
+const HIBO_ACCENT = '#F4E4BC';     // cream
+const HIBO_GREY = '#8E8E93';
+const HIBO_LINK = '#007AFF';
 
 export interface PlanOption {
   id: string;
@@ -53,7 +53,7 @@ export function getPremiumPlanById(id: string): PremiumPlanConfig | undefined {
   return PREMIUM_PLANS.find((p) => p.id === id);
 }
 
-export interface SnapchatStyleBottomSheetProps {
+export interface HiboBottomSheetProps {
   visible: boolean;
   onClose: () => void;
   headerIcon?: keyof typeof Ionicons.glyphMap;
@@ -71,7 +71,7 @@ export interface SnapchatStyleBottomSheetProps {
   >;
 }
 
-export function SnapchatStyleBottomSheet({
+export function HiboBottomSheet({
   visible,
   onClose,
   headerIcon = 'flame',
@@ -84,7 +84,7 @@ export function SnapchatStyleBottomSheet({
   primaryButtonText,
   onPrimaryPress,
   footerSegments = [],
-}: SnapchatStyleBottomSheetProps) {
+}: HiboBottomSheetProps) {
   const bottomSheetRef = useRef<BottomSheetModal>(null);
   const hasPlans = plans && plans.length > 0;
   const defaultSelected = hasPlans ? (initialSelectedPlanId ?? plans[0].id) : null;
@@ -134,16 +134,15 @@ export function SnapchatStyleBottomSheet({
       backgroundStyle={styles.sheet}
     >
       <BottomSheetView style={styles.content}>
-        {/* Close - X in grey circle */}
         <TouchableOpacity style={styles.closeCircle} onPress={handleDismiss} activeOpacity={0.7}>
-          <Ionicons name="close" size={20} color={SNAP_GREY} />
+          <Ionicons name="close" size={20} color={HIBO_GREY} />
         </TouchableOpacity>
 
         <View style={styles.headerIconWrap}>
           <View style={styles.headerIconCircle}>
             <Ionicons name="person" size={30} color="#333" />
             <View style={styles.headerIconBadge}>
-                <Ionicons name={headerIcon} size={16} color="#333" />
+              <Ionicons name={headerIcon} size={16} color="#333" />
             </View>
           </View>
         </View>
@@ -246,7 +245,7 @@ const styles = StyleSheet.create({
     width: 64,
     height: 64,
     borderRadius: 32,
-    backgroundColor: SNAP_PRIMARY,
+    backgroundColor: HIBO_PRIMARY,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -257,12 +256,12 @@ const styles = StyleSheet.create({
     width: 24,
     height: 24,
     borderRadius: 12,
-    backgroundColor: SNAP_SECONDARY,
+    backgroundColor: HIBO_SECONDARY,
     justifyContent: 'center',
     alignItems: 'center',
   },
   title: { fontSize: 24, fontWeight: '700', color: '#000', marginBottom: 12 },
-  description: { fontSize: 15, color: SNAP_GREY, lineHeight: 22, marginBottom: 24 },
+  description: { fontSize: 15, color: HIBO_GREY, lineHeight: 22, marginBottom: 24 },
   plansContainer: { marginBottom: 24, gap: 12 },
   optionCard: {
     flexDirection: 'row',
@@ -271,7 +270,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
     borderWidth: 1.5,
-    borderColor: SNAP_PRIMARY,
+    borderColor: HIBO_PRIMARY,
     paddingVertical: 16,
     paddingHorizontal: 16,
   },
@@ -280,18 +279,18 @@ const styles = StyleSheet.create({
   optionCardRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   optionLabel: { fontSize: 16, fontWeight: '600', color: '#000' },
   planBadge: {
-    backgroundColor: SNAP_SECONDARY,
+    backgroundColor: HIBO_SECONDARY,
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 8,
   },
   planBadgeText: { fontSize: 11, fontWeight: '700', color: '#333' },
-  optionPrice: { fontSize: 14, color: SNAP_GREY, marginTop: 4 },
+  optionPrice: { fontSize: 14, color: HIBO_GREY, marginTop: 4 },
   optionCheckWrap: {
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: SNAP_PRIMARY,
+    backgroundColor: HIBO_PRIMARY,
     justifyContent: 'center',
     alignItems: 'center',
     marginLeft: 12,
@@ -299,7 +298,7 @@ const styles = StyleSheet.create({
   optionCheckWrapEmpty: { backgroundColor: '#E5E5EA' },
   primaryButton: {
     width: '100%',
-    backgroundColor: SNAP_ACCENT,
+    backgroundColor: HIBO_ACCENT,
     paddingVertical: 16,
     borderRadius: 28,
     alignItems: 'center',
@@ -314,7 +313,7 @@ const styles = StyleSheet.create({
     marginTop: 20,
     paddingHorizontal: 4,
   },
-  footerText: { fontSize: 12, color: SNAP_GREY },
+  footerText: { fontSize: 12, color: HIBO_GREY },
   footerLinkWrap: { marginHorizontal: 2 },
-  footerLink: { fontSize: 12, color: SNAP_LINK, textDecorationLine: 'underline' },
+  footerLink: { fontSize: 12, color: HIBO_LINK, textDecorationLine: 'underline' },
 });

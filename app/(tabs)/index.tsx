@@ -1,16 +1,16 @@
 import { AppHeader } from '@/components/app-header';
+import { HiboBottomSheet, PREMIUM_PLANS_FOR_SHEET } from '@/components/HiboBottomSheet';
 import { PostCard } from '@/components/post-card';
 import { PostCardSkeleton } from '@/components/SkeletonLoader';
-import { PREMIUM_PLANS_FOR_SHEET, SnapchatStyleBottomSheet } from '@/components/SnapchatStyleBottomSheet';
 import { Toast } from '@/components/Toast';
-import { TransitionScreen } from '../../components/TransitionScreen';
 import { Colors } from '@/constants/theme';
 import { canLikeUser, checkForMatch, checkMatchLimit, getAllUserProfiles, getCurrentUser, getUserProfile, getUserProfilesPaginated, isPremiumUser, likeUser, recordProfileView, saveProfileComment, supabase, updateLastActive } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Animated, AppState, AppStateStatus, Dimensions, Modal, NativeSyntheticEvent, NativeScrollEvent, RefreshControl, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Animated, AppState, AppStateStatus, Dimensions, Modal, NativeScrollEvent, NativeSyntheticEvent, RefreshControl, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { TransitionScreen } from '../../components/TransitionScreen';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const FEED_CONTENT_WIDTH = SCREEN_WIDTH - 32;
@@ -438,12 +438,10 @@ export default function HomeScreen() {
   // Update active status when screen comes into focus (don't refetch profiles to avoid heavy loading)
   useFocusEffect(
     React.useCallback(() => {
-      // Only update active status, don't refetch profiles (use pull-to-refresh instead)
       updateCurrentUserActive();
-      
-      // Only fetch profiles if there are none loaded (initial load only)
+      // If feed is empty (not initial load), refetch in background - don't show skeleton to avoid flicker
       if (feedItems.length === 0 && !loading) {
-        fetchUserProfiles();
+        fetchUserProfiles(true); // isRefresh: no skeleton, no loading flash
       }
     }, [feedItems.length, loading])
   );
@@ -1396,7 +1394,7 @@ export default function HomeScreen() {
       {showTransition && <TransitionScreen />}
       
       {/* Premium Upgrade Bottom Sheet */}
-      <SnapchatStyleBottomSheet
+      <HiboBottomSheet
         visible={showPremiumSheet}
         onClose={() => setShowPremiumSheet(false)}
         headerIcon="star"

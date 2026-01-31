@@ -3,7 +3,7 @@
  * Same layout and style as Profile: header, separator, cards
  */
 
-import { PREMIUM_PLANS_FOR_SHEET, SnapchatStyleBottomSheet } from '@/components/SnapchatStyleBottomSheet';
+import { PREMIUM_PLANS_FOR_SHEET, HiboBottomSheet } from '@/components/HiboBottomSheet';
 import { Colors } from '@/constants/theme';
 import { signOut } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
@@ -152,8 +152,8 @@ export default function SettingsScreen() {
         </View>
       </ScrollView>
 
-      {/* Premium – Snapchat-style bottom sheet with monthly/yearly plans */}
-      <SnapchatStyleBottomSheet
+      {/* Premium – HIBO bottom sheet with monthly/yearly plans */}
+      <HiboBottomSheet
         visible={showPremiumSheet}
         onClose={() => setShowPremiumSheet(false)}
         headerIcon="diamond"
