@@ -5,7 +5,7 @@
 
 import { ProfileSkeleton } from '@/components/SkeletonLoader';
 import { Toast } from '@/components/Toast';
-import { Colors } from '@/constants/theme';
+import { Colors, FontSize, FontWeight, LineHeight, Radius, Spacing, Typography } from '@/constants/theme';
 import { createPost, createPrompt, deletePost, deletePrompt, getUserPosts, getUserProfile, getUserPrompts, Post, Prompt, PROMPT_QUESTIONS, signOut, supabase, updatePrompt, uploadPhotos } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
@@ -29,8 +29,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const { width } = Dimensions.get('window');
 const isSmallWidth = width < 360;
-const titleFontSize = isSmallWidth ? 24 : width < 400 ? 26 : 28;
+const titleFontSize = isSmallWidth ? FontSize.display : width < 400 ? 26 : FontSize.hero;
 
+/** Profile screen theme – all from @/constants/theme */
 const theme = {
   primary: Colors.background,
   secondary: Colors.cardBackground,
@@ -1776,26 +1777,26 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 15,
+    paddingHorizontal: Spacing.xxl,
+    paddingVertical: Spacing.lg,
   },
   headerButtonText: {
-    fontSize: 17,
+    fontSize: FontSize.xl + 1,
     color: theme.buttonActive,
-    fontWeight: '400',
+    fontWeight: FontWeight.regular,
   },
   headerButtonDisabled: {
     opacity: 0.5,
   },
   headerName: {
-    fontSize: 17,
-    fontWeight: '600',
+    fontSize: FontSize.xl + 1,
+    fontWeight: FontWeight.semibold,
     color: theme.black,
   },
   headerRightRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: Spacing.md,
   },
   headerIconButton: {
     padding: 4,
@@ -1810,24 +1811,24 @@ const styles = StyleSheet.create({
   },
   tabsContainer: {
     flexDirection: 'row',
-    paddingHorizontal: 20,
+    paddingHorizontal: Spacing.xxl,
     paddingTop: 0,
     paddingBottom: 0,
   },
   tab: {
     flex: 1,
-    paddingVertical: 12,
+    paddingVertical: Spacing.lg,
     alignItems: 'center',
     position: 'relative',
   },
   tabText: {
-    fontSize: 17,
+    fontSize: FontSize.xl + 1,
     color: theme.gray,
-    fontWeight: '400',
+    fontWeight: FontWeight.regular,
   },
   tabTextActive: {
     color: theme.black,
-    fontWeight: '600',
+    fontWeight: FontWeight.semibold,
   },
   tabIndicator: {
     position: 'absolute',
@@ -1853,11 +1854,11 @@ const styles = StyleSheet.create({
     paddingBottom: 100,
   },
   photosSection: {
-    marginBottom: 20,
+    marginBottom: Spacing.xxl,
   },
   photosScrollContent: {
-    paddingHorizontal: 20,
-    gap: 12,
+    paddingHorizontal: Spacing.xxl,
+    gap: Spacing.lg,
   },
   photoContainer: {
     width: width * 0.9,
@@ -1896,22 +1897,23 @@ const styles = StyleSheet.create({
   },
   card: {
     backgroundColor: theme.secondary,
-    marginHorizontal: 20,
-    marginBottom: 16,
-    borderRadius: 0,
+    marginHorizontal: Spacing.xxl,
+    marginBottom: Spacing.xl,
+    borderRadius: Radius.none,
     borderWidth: 1,
     borderColor: theme.black,
-    padding: 20,
+    padding: Spacing.xxl,
   },
   cardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: Spacing.xl,
   },
   cardTitle: {
-    fontSize: 18,
-    fontWeight: '600',
+    ...Typography.title,
+    fontSize: FontSize.xl,
+    fontWeight: FontWeight.semibold,
     color: theme.black,
   },
   editLabel: {
@@ -1925,10 +1927,10 @@ const styles = StyleSheet.create({
     paddingBottom: 0,
   },
   name: {
-    fontSize: 24,
-    fontWeight: '600',
+    fontSize: FontSize.display,
+    fontWeight: FontWeight.semibold,
     color: theme.black,
-    marginBottom: 4,
+    marginBottom: Spacing.sm,
   },
   age: {
     fontSize: 16,
@@ -1944,26 +1946,26 @@ const styles = StyleSheet.create({
     borderBottomColor: theme.lightGray,
   },
   infoLabel: {
-    fontSize: 16,
+    fontSize: FontSize.xl,
     color: theme.gray,
-    fontWeight: '500',
+    fontWeight: FontWeight.medium,
     flex: 1,
   },
   infoValue: {
-    fontSize: 16,
+    fontSize: FontSize.xl,
     color: theme.black,
-    fontWeight: '400',
+    fontWeight: FontWeight.regular,
     textAlign: 'right',
     flex: 1,
-    marginLeft: 16,
+    marginLeft: Spacing.xl,
   },
   summaryStrip: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 16,
-    gap: 12,
+    paddingVertical: Spacing.xl,
+    gap: Spacing.lg,
   },
   summaryItem: {
     flexDirection: 'row',
@@ -1982,22 +1984,22 @@ const styles = StyleSheet.create({
   infoRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
+    paddingVertical: Spacing.lg,
   },
   infoRowIcon: {
-    marginRight: 12,
+    marginRight: Spacing.lg,
     opacity: 0.85,
   },
   infoRowLabel: {
-    fontSize: 16,
+    fontSize: FontSize.xl,
     color: theme.gray,
-    fontWeight: '500',
+    fontWeight: FontWeight.medium,
     flex: 1,
   },
   infoRowValue: {
-    fontSize: 16,
+    fontSize: FontSize.xl,
     color: theme.black,
-    fontWeight: '400',
+    fontWeight: FontWeight.regular,
     flex: 1,
     textAlign: 'right',
   },
@@ -2020,51 +2022,48 @@ const styles = StyleSheet.create({
   },
   bioCard: {
     backgroundColor: theme.secondary,
-    marginHorizontal: 20,
-    marginBottom: 16,
-    borderRadius: 0,
+    marginHorizontal: Spacing.xxl,
+    marginBottom: Spacing.xl,
+    borderRadius: Radius.none,
     borderWidth: 1,
     borderColor: theme.black,
-    padding: 20,
+    padding: Spacing.xxl,
     minHeight: 120,
   },
   bioViewContainer: {
-    paddingTop: 8,
+    paddingTop: Spacing.md,
   },
   bioTitleText: {
-    fontSize: 14,
+    ...Typography.label,
+    fontSize: FontSize.md,
     color: theme.gray,
-    fontWeight: '400',
-    marginBottom: 12,
+    marginBottom: Spacing.lg,
     textAlign: 'left',
   },
   bioText: {
-    fontSize: 24,
-    color: theme.black,
-    fontWeight: '700',
-    lineHeight: 32,
+    ...Typography.bodyLarge,
+    fontSize: FontSize.display,
+    lineHeight: LineHeight.relaxed,
     textAlign: 'left',
   },
   bioPromptsList: {
     width: '100%',
   },
   bioPromptCard: {
-    marginBottom: 16,
-    paddingBottom: 16,
+    marginBottom: Spacing.xl,
+    paddingBottom: Spacing.xl,
     borderBottomWidth: 1,
     borderBottomColor: theme.lightGray,
   },
   bioPromptQuestion: {
-    fontSize: 14,
+    ...Typography.label,
+    fontSize: FontSize.md,
     color: theme.gray,
-    fontWeight: '400',
-    marginBottom: 8,
   },
   bioPromptAnswer: {
-    fontSize: 24,
-    color: theme.black,
-    fontWeight: '700',
-    lineHeight: 32,
+    ...Typography.bodyLarge,
+    fontSize: FontSize.display,
+    lineHeight: LineHeight.relaxed,
     textAlign: 'left',
   },
   bioPromptsEditContainer: {
@@ -2081,16 +2080,14 @@ const styles = StyleSheet.create({
     borderBottomColor: theme.lightGray,
   },
   bioPromptPreviewQuestion: {
-    fontSize: 14,
+    ...Typography.label,
+    fontSize: FontSize.md,
     color: theme.gray,
-    fontWeight: '400',
-    marginBottom: 8,
   },
   bioPromptPreviewAnswer: {
-    fontSize: 24,
-    color: theme.black,
-    fontWeight: '700',
-    lineHeight: 32,
+    ...Typography.bodyLarge,
+    fontSize: FontSize.display,
+    lineHeight: LineHeight.relaxed,
     textAlign: 'left',
   },
   sectionInfoText: {
@@ -2295,36 +2292,36 @@ const styles = StyleSheet.create({
     marginRight: 4,
   },
   promptsSection: {
-    marginHorizontal: 20,
-    marginBottom: 16,
+    marginHorizontal: Spacing.xxl,
+    marginBottom: Spacing.xl,
   },
   promptsTitleCard: {
     backgroundColor: theme.secondary,
     borderWidth: 1,
     borderColor: theme.black,
-    marginBottom: 12,
+    marginBottom: Spacing.lg,
   },
   promptsTitleHeader: {
     backgroundColor: '#D5AFFD',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
+    paddingVertical: Spacing.lg,
+    paddingHorizontal: Spacing.xl,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
   promptsTitleText: {
-    fontSize: 16,
-    fontWeight: '700',
+    fontSize: FontSize.xl,
+    fontWeight: FontWeight.bold,
     color: theme.black,
     textTransform: 'uppercase',
     letterSpacing: 1,
   },
   addButtonInHeader: {
-    padding: 4,
+    padding: Spacing.sm,
   },
   postsSection: {
-    marginHorizontal: 20,
-    marginBottom: 16,
+    marginHorizontal: Spacing.xxl,
+    marginBottom: Spacing.xl,
   },
   addPostButton: {
     flexDirection: 'row',
@@ -2343,18 +2340,18 @@ const styles = StyleSheet.create({
   inlinePostInputContainer: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 12,
-    marginBottom: 12,
-    paddingHorizontal: 16,
+    gap: Spacing.lg,
+    marginBottom: Spacing.lg,
+    paddingHorizontal: Spacing.xl,
   },
   inlinePostInput: {
     flex: 1,
-    fontSize: 16,
+    fontSize: FontSize.xl,
     color: theme.black,
     borderWidth: 1,
     borderColor: theme.black,
-    borderRadius: 0,
-    padding: 16,
+    borderRadius: Radius.none,
+    padding: Spacing.xl,
     minHeight: 50,
     maxHeight: 100,
     backgroundColor: theme.white,
@@ -2451,12 +2448,12 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   postCardTitle: {
-    fontSize: 14,
+    ...Typography.label,
+    fontSize: FontSize.md,
     color: theme.gray,
-    fontWeight: '400',
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 12,
+    paddingHorizontal: Spacing.xl,
+    paddingTop: Spacing.xl,
+    paddingBottom: Spacing.lg,
   },
   postCardImageContainer: {
     width: '100%',
@@ -2543,22 +2540,22 @@ const styles = StyleSheet.create({
   },
   modalContent: {
     backgroundColor: theme.white,
-    borderRadius: 0,
+    borderRadius: Radius.none,
     borderWidth: 1,
     borderColor: theme.black,
     width: width - 40,
     maxHeight: '80%',
-    padding: 20,
+    padding: Spacing.xxl,
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: Spacing.xxl,
   },
   modalTitle: {
-    fontSize: 20,
-    fontWeight: '600',
+    fontSize: FontSize.xxl,
+    fontWeight: FontWeight.semibold,
     color: theme.black,
   },
   modalScrollView: {
@@ -2650,23 +2647,21 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   promptQuestion: {
-    fontSize: 14,
+    ...Typography.label,
+    fontSize: FontSize.md,
     color: theme.gray,
-    fontWeight: '400',
-    marginBottom: 12,
+    marginBottom: Spacing.lg,
   },
   promptAnswer: {
-    fontSize: 24,
-    color: theme.black,
-    fontWeight: '700',
-    lineHeight: 32,
-    letterSpacing: -0.5,
+    ...Typography.bodyLarge,
+    fontSize: FontSize.display,
+    lineHeight: LineHeight.relaxed,
   },
   promptCard: {
-    padding: 16,
+    padding: Spacing.xl,
     backgroundColor: theme.secondary,
-    borderRadius: 0,
-    marginBottom: 12,
+    borderRadius: Radius.none,
+    marginBottom: Spacing.lg,
   },
   promptActions: {
     flexDirection: 'row',
@@ -2702,13 +2697,13 @@ const styles = StyleSheet.create({
   },
   // Modal styles for prompts
   modalBody: {
-    gap: 16,
+    gap: Spacing.xl,
   },
   modalLabel: {
-    fontSize: 14,
-    fontWeight: '600',
+    fontSize: FontSize.md,
+    fontWeight: FontWeight.semibold,
     color: Colors.textDark,
-    marginBottom: 8,
+    marginBottom: Spacing.md,
   },
   questionPicker: {
     maxHeight: 200,
@@ -2757,8 +2752,8 @@ const styles = StyleSheet.create({
   },
   modalSaveButtonText: {
     color: Colors.cardBackground,
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: FontSize.xl,
+    fontWeight: FontWeight.semibold,
   },
   postInputContainer: {
     flexDirection: 'row',
@@ -2788,13 +2783,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   postCardDescriptionContainer: {
-    padding: 16,
+    padding: Spacing.xl,
     backgroundColor: theme.lightGray,
     minHeight: 100,
   },
   postCardDescription: {
-    fontSize: 16,
+    fontSize: FontSize.xl,
     color: theme.black,
-    lineHeight: 24,
+    lineHeight: LineHeight.base + 2,
   },
 });

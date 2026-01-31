@@ -235,8 +235,9 @@ export default function HomeScreen() {
   const currentUserInterestRef = useRef<string | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const statusRefreshRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  // Scroll: floating header with user name (SliverAppBar-style)
+  // Scroll: floating header with user name (SliverAppBar-style); hide "For you" + filter when scrolled
   const scrollY = useRef(new Animated.Value(0)).current;
+  const [scrollPastThreshold, setScrollPastThreshold] = useState(false);
   const insets = useSafeAreaInsets();
   const SCROLL_THRESHOLD = 80;
 
@@ -741,24 +742,32 @@ export default function HomeScreen() {
     outputRange: [0, 1],
     extrapolate: 'clamp',
   });
+  // Main header opacity: hide "For you" + filter when scrolled; only floating name centered remains
+  const mainHeaderOpacity = scrollY.interpolate({
+    inputRange: [0, SCROLL_THRESHOLD],
+    outputRange: [1, 0],
+    extrapolate: 'clamp',
+  });
 
   // Regular function so ScrollView can call it (Animated.event returns object, causes "onScroll is not a function")
   const handleScroll = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
     const y = e.nativeEvent.contentOffset.y;
     scrollY.setValue(y);
+    setScrollPastThreshold(y > SCROLL_THRESHOLD);
   }, [scrollY]);
 
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" />
-      <AppHeader
-        title="For you"
-        onActionPress={() => {
-          // Open filter modal
-          setShowFilterModal(true);
-        }}
-        actionIcon="sparkles"
-      />
+      <Animated.View style={{ opacity: mainHeaderOpacity }} pointerEvents={scrollPastThreshold ? 'none' : 'auto'}>
+        <AppHeader
+          title="For you"
+          onActionPress={() => {
+            setShowFilterModal(true);
+          }}
+          actionIcon="sparkles"
+        />
+      </Animated.View>
       <ScrollView
         onScroll={handleScroll}
         scrollEventThrottle={16}

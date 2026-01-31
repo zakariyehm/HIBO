@@ -1,4 +1,4 @@
-import { Colors } from '@/constants/theme';
+import { Colors, Fonts, FontSize, FontWeight, LineHeight, Radius, Spacing, Typography } from '@/constants/theme';
 import type { Post } from '@/lib/supabase';
 import { blockUser, checkForMatch, getUserPosts, getUserPrompts, getUserStatus, likeUser, passUser, recordProfileView, supabase } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
@@ -898,24 +898,16 @@ const styles = StyleSheet.create({
     color: Colors.textDark,
   },
   bioContainer: {
-    marginBottom: 12,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 0,
-    padding: 16,
+    marginBottom: Spacing.lg,
+    backgroundColor: Colors.cardBackground,
+    borderRadius: Radius.none,
+    padding: Spacing.xl,
   },
   bioTitle: {
-    fontSize: 13,
-    color: Colors.textDark,
-    fontWeight: '400',
-    marginBottom: 8,
+    ...Typography.label,
   },
   bioText: {
-    fontSize: 32,
-    color: Colors.textDark,
-    fontWeight: '700',
-    lineHeight: 42,
-    letterSpacing: -0.5,
-    fontFamily: 'serif',
+    ...Typography.bodyLarge,
   },
   postTextContainer: {
     marginBottom: 12,
@@ -1006,12 +998,10 @@ const styles = StyleSheet.create({
     padding: 0,
   },
   userPostCardTitle: {
-    fontSize: 13,
-    color: Colors.textDark,
-    fontWeight: '400',
+    ...Typography.label,
     marginBottom: 6,
-    paddingHorizontal: 16,
-    paddingTop: 16,
+    paddingHorizontal: Spacing.xl,
+    paddingTop: Spacing.xl,
   },
   userPostCardImageContainer: {
     width: '100%',
@@ -1023,40 +1013,27 @@ const styles = StyleSheet.create({
     height: '100%',
   },
   userPostCardDescriptionContainer: {
-    paddingHorizontal: 16,
-    paddingTop: 2,
-    paddingBottom: 16,
+    paddingHorizontal: Spacing.xl,
+    paddingTop: Spacing.xs,
+    paddingBottom: Spacing.xl,
   },
   userPostCardDescription: {
-    fontSize: 32,
-    color: Colors.textDark,
-    fontWeight: '700',
-    lineHeight: 42,
-    letterSpacing: -0.5,
-    fontFamily: 'serif',
+    ...Typography.bodyLarge,
   },
   promptsContainer: {
     marginBottom: 12,
     gap: 12,
   },
   promptCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 0,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: Colors.borderLight,
+    backgroundColor: Colors.cardBackground,
+    borderRadius: Radius.none,
+    padding: Spacing.xl,
+    marginBottom: Spacing.lg,
   },
   promptQuestion: {
-    fontSize: 13,
-    color: Colors.textLight,
-    fontWeight: '400',
-    marginBottom: 8,
+    ...Typography.label,
   },
   promptAnswer: {
-    fontSize: 20,
-    color: Colors.textDark,
-    fontWeight: '700',
-    lineHeight: 28,
-    letterSpacing: -0.5,
+    ...Typography.bodyLarge,
   },
 });
