@@ -1006,12 +1006,12 @@ const styles = StyleSheet.create({
     padding: 0,
   },
   userPostCardTitle: {
-    fontSize: 14,
-    color: Colors.textLight,
+    fontSize: 13,
+    color: Colors.textDark,
     fontWeight: '400',
+    marginBottom: 6,
     paddingHorizontal: 16,
     paddingTop: 16,
-    paddingBottom: 8,
   },
   userPostCardImageContainer: {
     width: '100%',
@@ -1023,12 +1023,17 @@ const styles = StyleSheet.create({
     height: '100%',
   },
   userPostCardDescriptionContainer: {
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingTop: 2,
+    paddingBottom: 16,
   },
   userPostCardDescription: {
-    fontSize: 15,
+    fontSize: 32,
     color: Colors.textDark,
-    lineHeight: 22,
+    fontWeight: '700',
+    lineHeight: 42,
+    letterSpacing: -0.5,
+    fontFamily: 'serif',
   },
   promptsContainer: {
     marginBottom: 12,
